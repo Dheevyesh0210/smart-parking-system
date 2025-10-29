@@ -1,9 +1,30 @@
 dash==2.17.1
-pandas==2.2.3
-plotly==5.18.0
-flask==3.0.0
-flask-cors==4.0.0
-gunicorn==21.2.0
-numpy==1.26.4
-psycopg2-binary==2.9.9
-SQLAlchemy==2.0.25
+   pandas==2.2.3
+   plotly==5.18.0
+   flask==3.0.0
+   flask-cors==4.0.0
+   gunicorn==21.2.0
+   numpy==1.26.4
+   psycopg2-binary==2.9.9
+   SQLAlchemy==2.0.25
+```
+   - Commit message: `Add database dependencies`
+   - Click "Commit changes"
+
+### **Step 2: Wait for Automatic Deployment**
+
+1. **Go back to Render** → your web service
+2. **You should see a new deployment starting** automatically
+3. **Watch the logs** - you should see:
+   - Installing new packages (psycopg2, SQLAlchemy)
+   - "Initializing database..."
+   - "Database initialized successfully"
+   - "Database ready!"
+
+### **Step 3: Test the System**
+
+Once deployment succeeds:
+
+1. **Test the API health check**:
+```
+   https://your-app-url.onrender.com/api/health
