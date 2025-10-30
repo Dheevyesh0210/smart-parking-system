@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: smart-parking-system
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:server
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
