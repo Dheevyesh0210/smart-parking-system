@@ -371,8 +371,14 @@ else:
     print("Database initialization failed!")
 
 # Dash App Setup
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    requests_pathname_prefix="/",
+    routes_pathname_prefix="/"
+)
 server = app.server
+
 app.title = "Parking Management System"
 CORS(server)
 
