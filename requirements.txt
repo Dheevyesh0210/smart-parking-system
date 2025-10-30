@@ -6,4 +6,8 @@ flask-cors==4.0.0
 gunicorn==21.2.0
 numpy==1.26.4
 psycopg2-binary==2.9.9
+<<<<<<< HEAD
 SQLAlchemy==2.0.25
+=======
+SQLAlchemy==2.0.25
+>>>>>>> 646cb52bdb5ca35d795aa6cb235cc59d7c387d2f
