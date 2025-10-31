@@ -401,9 +401,12 @@ def get_slots_api():
         return jsonify({
             'success': True,
             'data': {
-                'total': TOTAL_SLOTS, 'available': stats['available'], 'occupied': stats['occupied'],
-                'occupancy_rate': round(stats['occupancy_rate'], 1), 'current_rate': get_dynamic_rate(),
-                'total_earnings': round(stats['total_earnings'], 2)
+                'total': int(TOTAL_SLOTS),
+                'available': int(stats['available']),
+                'occupied': int(stats['occupied']),
+                'occupancy_rate': float(round(stats['occupancy_rate'], 1)),
+                'current_rate': float(get_dynamic_rate()),
+                'total_earnings': float(round(stats['total_earnings'], 2))
             }
         })
     except Exception as e:
