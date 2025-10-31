@@ -10,6 +10,19 @@ from flask import request, jsonify
 from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import numpy as np
+
+def convert_to_json_serializable(obj):
+    """Convert numpy/pandas types to JSON serializable Python types"""
+    if isinstance(obj, (np.integer, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64)):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    return obj
 
 # Configuration
 TOTAL_SLOTS = 100
@@ -371,14 +384,8 @@ else:
     print("Database initialization failed!")
 
 # Dash App Setup
-app = dash.Dash(
-    __name__,
-    suppress_callback_exceptions=True,
-    requests_pathname_prefix="/",
-    routes_pathname_prefix="/"
-)
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
-
 app.title = "Parking Management System"
 CORS(server)
 
@@ -401,12 +408,9 @@ def get_slots_api():
         return jsonify({
             'success': True,
             'data': {
-                'total': int(TOTAL_SLOTS),
-                'available': int(stats['available']),
-                'occupied': int(stats['occupied']),
-                'occupancy_rate': float(round(stats['occupancy_rate'], 1)),
-                'current_rate': float(get_dynamic_rate()),
-                'total_earnings': float(round(stats['total_earnings'], 2))
+                'total': TOTAL_SLOTS, 'available': stats['available'], 'occupied': stats['occupied'],
+                'occupancy_rate': round(stats['occupancy_rate'], 1), 'current_rate': get_dynamic_rate(),
+                'total_earnings': round(stats['total_earnings'], 2)
             }
         })
     except Exception as e:
