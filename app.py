@@ -405,14 +405,15 @@ def get_slots_api():
     try:
         df = get_parking_data()
         stats = get_statistics(df)
-        return jsonify({
-            'success': True,
-            'data': {
-                'total': TOTAL_SLOTS, 'available': stats['available'], 'occupied': stats['occupied'],
-                'occupancy_rate': round(stats['occupancy_rate'], 1), 'current_rate': get_dynamic_rate(),
-                'total_earnings': round(stats['total_earnings'], 2)
-            }
+        data = convert_to_json_serializable({
+            'total': TOTAL_SLOTS,
+            'available': stats['available'],
+            'occupied': stats['occupied'],
+            'occupancy_rate': round(stats['occupancy_rate'], 1),
+            'current_rate': get_dynamic_rate(),
+            'total_earnings': round(stats['total_earnings'], 2)
         })
+        return jsonify({'success': True, 'data': data})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -456,6 +457,7 @@ def create_booking_api():
 def get_bookings_api():
     try:
         bookings = get_bookings()
+        bookings = convert_to_json_serializable(bookings)
         return jsonify({'success': True, 'bookings': bookings, 'count': len(bookings)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -622,11 +624,6 @@ def render_dashboard_content(df, stats):
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
-                html.H3(f"{stats['occupied']}", style={'color': WARNING_COLOR, 'margin': 0, 'fontSize': '32px'}),
-                html.P("Occupied Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
-            ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
-
-            html.Div([html.Div([
                 html.H3(f"{stats['occupancy_rate']:.1f}%",
                         style={'color': ACCENT_COLOR, 'margin': 0, 'fontSize': '32px'}),
                 html.P("Occupancy Rate", style={'color': TEXT_SECONDARY, 'margin': 0})
@@ -783,71 +780,77 @@ def render_activity_content():
     ])
 
 
+# App Layout
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='session-store', storage_type='session'),
     dcc.Store(id='view-store', data='dashboard'),
-    html.Div(id='page-content', children=login_layout()),  # ← Add initial children here
+    html.Div(id='page-content', children=login_layout()),
     dcc.Interval(id='interval-component', interval=10 * 1000, n_intervals=0)
 ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
 
 
-# Callbacks
+# FIXED CALLBACKS - SEPARATED TO AVOID REFERENCE ERRORS
+
+# Callback 1: Handle login
 @app.callback(
-    Output('page-content', 'children'),
-    [Input('url', 'pathname'), Input('public-booking-button', 'n_clicks'), Input('back-to-login', 'n_clicks')],
-    State('session-store', 'data'),
-    prevent_initial_call=True
-)
-def display_page(pathname, public_clicks, back_clicks, session_data):
-    ctx = dash.callback_context
-
-    # If no trigger, show login by default
-    if not ctx.triggered:
-        return login_layout()
-
-    # Get which input triggered the callback
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    # Handle public booking button
-    if button_id == 'public-booking-button':
-        return public_booking_layout()
-
-    # Handle back to login button
-    elif button_id == 'back-to-login':
-        return login_layout()
-
-    # Handle URL changes
-    elif button_id == 'url':
-        if session_data and session_data.get('authenticated'):
-            return admin_dashboard_layout()
-        return login_layout()
-
-    # Default: check if user is authenticated
-    if session_data and session_data.get('authenticated'):
-        return admin_dashboard_layout()
-
-    return login_layout()
-
-@app.callback(
-    [Output('session-store', 'data'), Output('url', 'pathname'), Output('login-alert', 'children')],
+    [Output('session-store', 'data'), Output('login-alert', 'children')],
     Input('login-button', 'n_clicks'),
     [State('username-input', 'value'), State('password-input', 'value')],
     prevent_initial_call=True
 )
 def login(n_clicks, username, password):
-    if n_clicks > 0:
-        if username in ADMIN_CREDENTIALS and ADMIN_CREDENTIALS[username] == password:
+    if n_clicks and n_clicks > 0:
+        if username and password and username in ADMIN_CREDENTIALS and ADMIN_CREDENTIALS[username] == password:
             log_activity("User Login", f"User {username} logged in", username)
-            return {'authenticated': True, 'username': username}, '/dashboard', ''
+            return {'authenticated': True, 'username': username}, ''
         else:
-            return dash.no_update, dash.no_update, '❌ Invalid credentials'
-    return dash.no_update, dash.no_update, ''
+            return dash.no_update, '❌ Invalid credentials'
+    return dash.no_update, ''
 
 
+# Callback 2: Display the correct page based on session
 @app.callback(
-    [Output('session-store', 'data', allow_duplicate=True), Output('url', 'pathname', allow_duplicate=True)],
-    Input('logout-button', 'n_clicks'), State('session-store', 'data'), prevent_initial_call=True
+    Output('page-content', 'children'),
+    Input('session-store', 'data'),
+    prevent_initial_call=False
+)
+def display_page_on_auth(session_data):
+    if session_data and session_data.get('authenticated'):
+        return admin_dashboard_layout()
+    return login_layout()
+
+
+# Callback 3: Handle public booking button (only when it exists)
+@app.callback(
+    Output('page-content', 'children', allow_duplicate=True),
+    Input('public-booking-button', 'n_clicks'),
+    prevent_initial_call=True
+)
+def go_to_public_booking(n_clicks):
+    if n_clicks:
+        return public_booking_layout()
+    return dash.no_update
+
+
+# Callback 4: Handle back to login button (only when it exists)
+@app.callback(
+    Output('page-content', 'children', allow_duplicate=True),
+    Input('back-to-login', 'n_clicks'),
+    prevent_initial_call=True
+)
+def go_back_to_login(n_clicks):
+    if n_clicks:
+        return login_layout()
+    return dash.no_update
+
+
+# Callback 5: Handle logout
+@app.callback(
+    [Output('session-store', 'data', allow_duplicate=True), Output('url', 'pathname')],
+    Input('logout-button', 'n_clicks'),
+    State('session-store', 'data'),
+    prevent_initial_call=True
 )
 def logout(n_clicks, session_data):
     if n_clicks > 0:
@@ -857,6 +860,7 @@ def logout(n_clicks, session_data):
     return dash.no_update, dash.no_update
 
 
+# Callback 6: Handle navigation between dashboard sections
 @app.callback(
     Output('view-store', 'data'),
     [Input('nav-dashboard', 'n_clicks'), Input('nav-bookings', 'n_clicks'), Input('nav-activity', 'n_clicks')],
@@ -875,10 +879,12 @@ def navigation(dash_clicks, book_clicks, act_clicks):
     return 'dashboard'
 
 
+# Callback 7: Update admin dashboard content
 @app.callback(
     Output('admin-content', 'children'),
     [Input('interval-component', 'n_intervals'), Input('view-store', 'data')],
-    State('session-store', 'data'), prevent_initial_call=False
+    State('session-store', 'data'),
+    prevent_initial_call=False
 )
 def update_admin_content(n, view, session_data):
     if not session_data or not session_data.get('authenticated'):
@@ -905,9 +911,11 @@ def update_admin_content(n, view, session_data):
         return render_dashboard_content(df, stats)
 
 
+# Callback 8: Update public booking stats
 @app.callback(
     Output('public-stats', 'children'),
-    Input('interval-component', 'n_intervals'), prevent_initial_call=False
+    Input('interval-component', 'n_intervals'),
+    prevent_initial_call=False
 )
 def update_public_stats(n):
     df = get_parking_data()
@@ -930,9 +938,11 @@ def update_public_stats(n):
     ], style={'display': 'flex'})
 
 
+# Callback 9: Update booking cost display
 @app.callback(
     Output('booking-cost-display', 'children'),
-    Input('booking-duration', 'value'), prevent_initial_call=False
+    Input('booking-duration', 'value'),
+    prevent_initial_call=False
 )
 def update_cost(duration):
     if duration and duration > 0:
@@ -941,6 +951,7 @@ def update_cost(duration):
     return ""
 
 
+# Callback 10: Handle booking submission
 @app.callback(
     Output('booking-result', 'children'),
     Input('submit-booking', 'n_clicks'),
