@@ -797,21 +797,38 @@ app.layout = html.Div([
 @app.callback(
     Output('page-content', 'children'),
     [Input('url', 'pathname'), Input('public-booking-button', 'n_clicks'), Input('back-to-login', 'n_clicks')],
-    State('session-store', 'data'), prevent_initial_call=False
+    State('session-store', 'data'),
+    prevent_initial_call=True
 )
 def display_page(pathname, public_clicks, back_clicks, session_data):
     ctx = dash.callback_context
-    if ctx.triggered:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        if button_id == 'public-booking-button':
-            return public_booking_layout()
-        elif button_id == 'back-to-login':
-            return login_layout()
 
+    # If no trigger, show login by default
+    if not ctx.triggered:
+        return login_layout()
+
+    # Get which input triggered the callback
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # Handle public booking button
+    if button_id == 'public-booking-button':
+        return public_booking_layout()
+
+    # Handle back to login button
+    elif button_id == 'back-to-login':
+        return login_layout()
+
+    # Handle URL changes
+    elif button_id == 'url':
+        if session_data and session_data.get('authenticated'):
+            return admin_dashboard_layout()
+        return login_layout()
+
+    # Default: check if user is authenticated
     if session_data and session_data.get('authenticated'):
         return admin_dashboard_layout()
-    return login_layout()
 
+    return login_layout()
 
 @app.callback(
     [Output('session-store', 'data'), Output('url', 'pathname'), Output('login-alert', 'children')],
