@@ -10,6 +10,19 @@ from flask import request, jsonify
 from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import numpy as np
+
+def convert_to_json_serializable(obj):
+    """Convert numpy/pandas types to JSON serializable Python types"""
+    if isinstance(obj, (np.integer, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64)):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    return obj
 
 # Configuration
 TOTAL_SLOTS = 100
