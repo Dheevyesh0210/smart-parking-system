@@ -724,17 +724,17 @@ def render_admin_controls():
 def render_parking_grid(df):
     """Render visual parking grid showing all 100 slots by zone"""
     zones = ['Zone-A', 'Zone-B', 'Zone-C', 'Zone-D']
-    
+
     zone_grids = []
     for zone in zones:
         zone_df = df[df['Zone'] == zone]
-        
+
         # Create grid items for this zone
         grid_items = []
         for _, row in zone_df.iterrows():
             status = row['Status'].lower()
             slot_id = row['Slot ID']
-            
+
             # Determine color based on status
             if status == 'occupied':
                 bg_color = DANGER_COLOR
@@ -752,7 +752,7 @@ def render_parking_grid(df):
                 bg_color = SUCCESS_COLOR
                 icon = '✓'
                 tooltip = f"{slot_id}: Available"
-            
+
             grid_items.append(
                 html.Div([
                     html.Div(icon, style={'fontSize': '16px'}),
@@ -772,7 +772,7 @@ def render_parking_grid(df):
                     'alignItems': 'center'
                 }, title=tooltip)
             )
-        
+
         zone_grids.append(
             html.Div([
                 html.H4(zone, style={'color': TEXT_PRIMARY, 'marginBottom': '10px'}),
@@ -784,7 +784,7 @@ def render_parking_grid(df):
                 })
             ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px'})
         )
-    
+
     return html.Div([
         html.H3("🅿️ Live Parking Grid", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
         html.Div([
@@ -887,7 +887,9 @@ def render_dashboard_content(df, stats):
                         style={'width': '100%', 'height': '8px', 'backgroundColor': '#334155', 'borderRadius': '4px',
                                'marginTop': '8px', 'overflow': 'hidden'},
                         children=[html.Div(style={'width': f"{z['percentage']}%", 'height': '100%',
-                                                  'backgroundColor': SUCCESS_COLOR if z['percentage'] > 50 else WARNING_COLOR if z['percentage'] > 20 else DANGER_COLOR})])
+                                                  'backgroundColor': SUCCESS_COLOR if z[
+                                                                                          'percentage'] > 50 else WARNING_COLOR if
+                                                  z['percentage'] > 20 else DANGER_COLOR})])
                 ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px'})
                 for z in zone_data
             ], style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr 1fr 1fr', 'gap': '15px',
@@ -957,7 +959,8 @@ def render_bookings_content():
                         html.Span("✅ ACTIVE" if b['status'] == 'active' else "✓ COMPLETED",
                                   style={'padding': '6px 12px', 'borderRadius': '6px', 'fontSize': '12px',
                                          'fontWeight': 'bold',
-                                         'backgroundColor': SUCCESS_COLOR if b['status'] == 'active' else TEXT_SECONDARY,
+                                         'backgroundColor': SUCCESS_COLOR if b[
+                                                                                 'status'] == 'active' else TEXT_SECONDARY,
                                          'color': 'white'})
                     ])
                 ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center'})
@@ -974,11 +977,15 @@ def render_activity_content():
         html.Div([
             html.Div([
                 html.Div([
-                    html.Span(log['timestamp'].strftime("%Y-%m-%d %H:%M:%S") if hasattr(log['timestamp'], 'strftime') else str(log['timestamp']),
+                    html.Span(log['timestamp'].strftime("%Y-%m-%d %H:%M:%S") if hasattr(log['timestamp'],
+                                                                                        'strftime') else str(
+                        log['timestamp']),
                               style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'width': '150px'}),
                     html.Span(f"👤 {log['user_name']}",
-                              style={'color': ACCENT_COLOR, 'fontSize': '14px', 'width': '120px', 'marginLeft': '15px'}),
-                    html.Span(f"📋 {log['action']}", style={'color': TEXT_PRIMARY, 'fontSize': '14px', 'width': '150px', 'marginLeft': '15px'}),
+                              style={'color': ACCENT_COLOR, 'fontSize': '14px', 'width': '120px',
+                                     'marginLeft': '15px'}),
+                    html.Span(f"📋 {log['action']}", style={'color': TEXT_PRIMARY, 'fontSize': '14px', 'width': '150px',
+                                                           'marginLeft': '15px'}),
                     html.Span(log['details'],
                               style={'color': TEXT_SECONDARY, 'fontSize': '14px', 'flex': 1, 'marginLeft': '15px'})
                 ], style={'display': 'flex', 'alignItems': 'center', 'padding': '15px', 'backgroundColor': CARD_BG,
