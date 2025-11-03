@@ -838,6 +838,83 @@ def render_dashboard_content(df, stats):
     ])
 
 
+def render_parking_grid(df):
+    """Render visual parking grid showing all 100 slots by zone"""
+    zones = ['Zone-A', 'Zone-B', 'Zone-C', 'Zone-D']
+
+    zone_grids = []
+    for zone in zones:
+        zone_df = df[df['Zone'] == zone]
+
+        # Create grid items for this zone
+        grid_items = []
+        for _, row in zone_df.iterrows():
+            status = row['Status'].lower()
+            slot_id = row['Slot ID']
+
+            # Determine color based on status
+            if status == 'occupied':
+                bg_color = DANGER_COLOR
+                icon = '🚗'
+                tooltip = f"{slot_id}: {row['Vehicle']} - {row['License']}"
+            elif status == 'maintenance':
+                bg_color = WARNING_COLOR
+                icon = '🔧'
+                tooltip = f"{slot_id}: Under Maintenance"
+            elif row.get('_is_reserved'):
+                bg_color = INFO_COLOR
+                icon = '📅'
+                tooltip = f"{slot_id}: Reserved"
+            else:
+                bg_color = SUCCESS_COLOR
+                icon = '✓'
+                tooltip = f"{slot_id}: Available"
+
+            grid_items.append(
+                html.Div([
+                    html.Div(icon, style={'fontSize': '16px'}),
+                    html.Div(slot_id, style={'fontSize': '10px', 'marginTop': '2px'})
+                ], style={
+                    'backgroundColor': bg_color,
+                    'padding': '8px',
+                    'borderRadius': '6px',
+                    'textAlign': 'center',
+                    'color': 'white',
+                    'cursor': 'pointer',
+                    'minWidth': '60px',
+                    'minHeight': '50px',
+                    'display': 'flex',
+                    'flexDirection': 'column',
+                    'justifyContent': 'center',
+                    'alignItems': 'center'
+                }, title=tooltip)
+            )
+
+        zone_grids.append(
+            html.Div([
+                html.H4(zone, style={'color': TEXT_PRIMARY, 'marginBottom': '10px'}),
+                html.Div(grid_items, style={
+                    'display': 'grid',
+                    'gridTemplateColumns': 'repeat(5, 1fr)',
+                    'gap': '8px',
+                    'marginBottom': '20px'
+                })
+            ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px'})
+        )
+
+    return html.Div([
+        html.H3("🅿️ Live Parking Grid", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
+        html.Div([
+            html.Div([
+                html.Span('🚗 Occupied', style={'marginRight': '15px', 'color': DANGER_COLOR}),
+                html.Span('✓ Available', style={'marginRight': '15px', 'color': SUCCESS_COLOR}),
+                html.Span('📅 Reserved', style={'marginRight': '15px', 'color': INFO_COLOR}),
+                html.Span('🔧 Maintenance', style={'color': WARNING_COLOR})
+            ], style={'marginBottom': '20px', 'fontSize': '14px', 'color': TEXT_PRIMARY})
+        ]),
+        html.Div(zone_grids, style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr', 'gap': '20px'})
+    ], style=CHART_CARD)
+
 def render_bookings_content():
     bookings = get_bookings()
     return html.Div([
