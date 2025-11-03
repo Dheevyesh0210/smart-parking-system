@@ -12,6 +12,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import numpy as np
 
+
 def convert_to_json_serializable(obj):
     """Convert numpy/pandas types to JSON serializable Python types"""
     if isinstance(obj, (np.integer, np.int64)):
@@ -23,6 +24,7 @@ def convert_to_json_serializable(obj):
     elif isinstance(obj, list):
         return [convert_to_json_serializable(item) for item in obj]
     return obj
+
 
 # Configuration
 TOTAL_SLOTS = 100
@@ -305,6 +307,100 @@ def get_activity_log():
         return []
 
 
+# Admin Reset Functions
+def reset_all_slots():
+    """Free up all parking slots"""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute('''UPDATE parking_slots 
+                      SET status = 'available', 
+                          entry_time = NULL,
+                          vehicle_type = NULL,
+                          license_plate = NULL,
+                          customer_id = NULL,
+                          is_reserved = FALSE,
+                          maintenance = FALSE,
+                          updated_at = CURRENT_TIMESTAMP''')
+        conn.commit()
+        affected_rows = cur.rowcount
+        cur.close()
+        conn.close()
+        log_activity("System Reset", f"All {affected_rows} parking slots reset to available", "Admin")
+        return True
+    except Exception as e:
+        print(f"Reset all slots error: {e}")
+        if conn:
+            conn.rollback()
+        return False
+
+
+def clear_old_bookings(days=30):
+    """Clear bookings older than specified days"""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute('''DELETE FROM bookings 
+                      WHERE created_at < NOW() - INTERVAL '%s days' ''', (days,))
+        conn.commit()
+        affected_rows = cur.rowcount
+        cur.close()
+        conn.close()
+        log_activity("Bookings Cleared", f"Deleted {affected_rows} old bookings (>{days} days)", "Admin")
+        return True
+    except Exception as e:
+        print(f"Clear old bookings error: {e}")
+        if conn:
+            conn.rollback()
+        return False
+
+
+def simulate_parking_activity():
+    """Add some random occupied slots for demo purposes"""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute('''SELECT slot_id FROM parking_slots 
+                      WHERE status = 'available' 
+                      ORDER BY RANDOM() 
+                      LIMIT 20''')
+        slots = cur.fetchall()
+
+        for slot in slots:
+            slot_id = slot['slot_id']
+            entry_time = datetime.datetime.now() - datetime.timedelta(hours=random.uniform(0, 5))
+            vehicle_type = random.choice(["Car", "Bike", "SUV"])
+            license_plate = f"MU-{random.randint(1000, 9999)}"
+            customer_id = f"C{random.randint(1000, 9999)}"
+
+            cur.execute('''UPDATE parking_slots 
+                          SET status = 'occupied', 
+                              entry_time = %s,
+                              vehicle_type = %s,
+                              license_plate = %s,
+                              customer_id = %s,
+                              updated_at = CURRENT_TIMESTAMP
+                          WHERE slot_id = %s''',
+                        (entry_time, vehicle_type, license_plate, customer_id, slot_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        log_activity("Demo Activity", f"Added {len(slots)} occupied slots for demo", "Admin")
+        return True
+    except Exception as e:
+        print(f"Simulate activity error: {e}")
+        if conn:
+            conn.rollback()
+        return False
+
+
 # Helper Functions
 def is_peak_hour():
     current_hour = datetime.datetime.now().hour
@@ -581,6 +677,10 @@ def admin_dashboard_layout():
                             style={'padding': '8px 16px', 'backgroundColor': TEXT_SECONDARY, 'color': 'white',
                                    'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
                                    'marginRight': '10px'}),
+                html.Button('🔧 Admin Tools', id='nav-admin-tools', n_clicks=0,
+                            style={'padding': '8px 16px', 'backgroundColor': WARNING_COLOR, 'color': 'white',
+                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
+                                   'marginRight': '10px'}),
                 html.Button('Logout', id='logout-button', n_clicks=0,
                             style={'padding': '8px 16px', 'backgroundColor': DANGER_COLOR, 'color': 'white',
                                    'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer'})
@@ -589,6 +689,36 @@ def admin_dashboard_layout():
                   'padding': '20px', 'backgroundColor': CARD_BG, 'marginBottom': '20px'}),
         html.Div(id='admin-content', style={'padding': '0 20px'})
     ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
+
+
+def render_admin_controls():
+    return html.Div([
+        html.H2("🔧 Admin Controls", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
+
+        html.Div([
+            html.Div([
+                html.H3("System Management", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
+                html.P("Manage parking slots and system data", style={'color': TEXT_SECONDARY, 'marginBottom': '20px'}),
+
+                html.Button('🔄 Reset All Slots', id='reset-all-button', n_clicks=0,
+                            style={'width': '100%', 'padding': '12px', 'backgroundColor': WARNING_COLOR,
+                                   'color': 'white', 'border': 'none', 'borderRadius': '6px',
+                                   'cursor': 'pointer', 'marginBottom': '10px', 'fontWeight': 'bold'}),
+
+                html.Button('🧹 Clear Old Bookings (30+ days)', id='clear-bookings-button', n_clicks=0,
+                            style={'width': '100%', 'padding': '12px', 'backgroundColor': INFO_COLOR,
+                                   'color': 'white', 'border': 'none', 'borderRadius': '6px',
+                                   'cursor': 'pointer', 'marginBottom': '10px'}),
+
+                html.Button('🎲 Simulate Activity (Add 20 Cars)', id='simulate-button', n_clicks=0,
+                            style={'width': '100%', 'padding': '12px', 'backgroundColor': SUCCESS_COLOR,
+                                   'color': 'white', 'border': 'none', 'borderRadius': '6px',
+                                   'cursor': 'pointer', 'marginBottom': '20px'}),
+
+                html.Div(id='admin-controls-result', style={'marginTop': '15px'})
+            ], style={'backgroundColor': CARD_BG, 'padding': '30px', 'borderRadius': '12px'})
+        ], style={'maxWidth': '600px'})
+    ])
 
 
 def render_dashboard_content(df, stats):
@@ -621,6 +751,11 @@ def render_dashboard_content(df, stats):
             html.Div([html.Div([
                 html.H3(f"{stats['available']}", style={'color': SUCCESS_COLOR, 'margin': 0, 'fontSize': '32px'}),
                 html.P("Available Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
+            ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
+
+            html.Div([html.Div([
+                html.H3(f"{stats['occupied']}", style={'color': WARNING_COLOR, 'margin': 0, 'fontSize': '32px'}),
+                html.P("Occupied Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
@@ -695,7 +830,7 @@ def render_dashboard_content(df, stats):
                 style_header={'backgroundColor': '#334155', 'fontWeight': 'bold', 'border': '1px solid #475569'},
                 style_data_conditional=[
                     {'if': {'filter_query': '{Status} = "OCCUPIED"'}, 'backgroundColor': '#1e293b'},
-                    {'if': {'filter_query': '{Status} = "AVAILABLE"'}, 'backgroundColor': '#0f172a'},
+                    {'if': {'filter_query': '{Status} = "AVAILABLE"'}, 'backgroundColor': '#0f172a'}
                 ],
                 page_size=15, sort_action='native', filter_action='native'
             )
@@ -790,7 +925,7 @@ app.layout = html.Div([
 ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
 
 
-# FIXED CALLBACKS - SEPARATED TO AVOID REFERENCE ERRORS
+# CALLBACKS
 
 # Callback 1: Handle login
 @app.callback(
@@ -821,7 +956,7 @@ def display_page_on_auth(session_data):
     return login_layout()
 
 
-# Callback 3: Handle public booking button (only when it exists)
+# Callback 3: Handle public booking button
 @app.callback(
     Output('page-content', 'children', allow_duplicate=True),
     Input('public-booking-button', 'n_clicks'),
@@ -833,7 +968,7 @@ def go_to_public_booking(n_clicks):
     return dash.no_update
 
 
-# Callback 4: Handle back to login button (only when it exists)
+# Callback 4: Handle back to login button
 @app.callback(
     Output('page-content', 'children', allow_duplicate=True),
     Input('back-to-login', 'n_clicks'),
@@ -863,10 +998,13 @@ def logout(n_clicks, session_data):
 # Callback 6: Handle navigation between dashboard sections
 @app.callback(
     Output('view-store', 'data'),
-    [Input('nav-dashboard', 'n_clicks'), Input('nav-bookings', 'n_clicks'), Input('nav-activity', 'n_clicks')],
+    [Input('nav-dashboard', 'n_clicks'),
+     Input('nav-bookings', 'n_clicks'),
+     Input('nav-activity', 'n_clicks'),
+     Input('nav-admin-tools', 'n_clicks')],
     prevent_initial_call=False
 )
-def navigation(dash_clicks, book_clicks, act_clicks):
+def navigation(dash_clicks, book_clicks, act_clicks, admin_clicks):
     ctx = dash.callback_context
     if ctx.triggered:
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
@@ -876,6 +1014,8 @@ def navigation(dash_clicks, book_clicks, act_clicks):
             return 'bookings'
         elif button_id == 'nav-activity':
             return 'activity'
+        elif button_id == 'nav-admin-tools':
+            return 'admin-tools'
     return 'dashboard'
 
 
@@ -907,11 +1047,68 @@ def update_admin_content(n, view, session_data):
         return render_bookings_content()
     elif view == 'activity':
         return render_activity_content()
+    elif view == 'admin-tools':
+        return render_admin_controls()
     else:
         return render_dashboard_content(df, stats)
 
 
-# Callback 8: Update public booking stats
+# Callback 8: Handle admin control buttons
+@app.callback(
+    Output('admin-controls-result', 'children'),
+    [Input('reset-all-button', 'n_clicks'),
+     Input('clear-bookings-button', 'n_clicks'),
+     Input('simulate-button', 'n_clicks')],
+    prevent_initial_call=True
+)
+def handle_admin_controls(reset_clicks, clear_clicks, simulate_clicks):
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        return ""
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if button_id == 'reset-all-button' and reset_clicks > 0:
+        if reset_all_slots():
+            return html.Div("✅ Successfully reset all parking slots to available!",
+                            style={'color': SUCCESS_COLOR, 'padding': '15px',
+                                   'backgroundColor': CARD_BG, 'borderRadius': '6px',
+                                   'border': f'2px solid {SUCCESS_COLOR}'})
+        else:
+            return html.Div("❌ Failed to reset slots. Check database connection.",
+                            style={'color': DANGER_COLOR, 'padding': '15px',
+                                   'backgroundColor': CARD_BG, 'borderRadius': '6px',
+                                   'border': f'2px solid {DANGER_COLOR}'})
+
+    elif button_id == 'clear-bookings-button' and clear_clicks > 0:
+        if clear_old_bookings(30):
+            return html.Div("✅ Successfully cleared old bookings!",
+                            style={'color': SUCCESS_COLOR, 'padding': '15px',
+                                   'backgroundColor': CARD_BG, 'borderRadius': '6px',
+                                   'border': f'2px solid {SUCCESS_COLOR}'})
+        else:
+            return html.Div("❌ Failed to clear bookings. Check database connection.",
+                            style={'color': DANGER_COLOR, 'padding': '15px',
+                                   'backgroundColor': CARD_BG, 'borderRadius': '6px',
+                                   'border': f'2px solid {DANGER_COLOR}'})
+
+    elif button_id == 'simulate-button' and simulate_clicks > 0:
+        if simulate_parking_activity():
+            return html.Div("✅ Successfully added 20 cars for demo!",
+                            style={'color': SUCCESS_COLOR, 'padding': '15px',
+                                   'backgroundColor': CARD_BG, 'borderRadius': '6px',
+                                   'border': f'2px solid {SUCCESS_COLOR}'})
+        else:
+            return html.Div("❌ Failed to simulate activity. Check database connection.",
+                            style={'color': DANGER_COLOR, 'padding': '15px',
+                                   'backgroundColor': CARD_BG, 'borderRadius': '6px',
+                                   'border': f'2px solid {DANGER_COLOR}'})
+
+    return ""
+
+
+# Callback 9: Update public booking stats
 @app.callback(
     Output('public-stats', 'children'),
     Input('interval-component', 'n_intervals'),
@@ -938,7 +1135,7 @@ def update_public_stats(n):
     ], style={'display': 'flex'})
 
 
-# Callback 9: Update booking cost display
+# Callback 10: Update booking cost display
 @app.callback(
     Output('booking-cost-display', 'children'),
     Input('booking-duration', 'value'),
@@ -951,7 +1148,7 @@ def update_cost(duration):
     return ""
 
 
-# Callback 10: Handle booking submission
+# Callback 11: Handle booking submission
 @app.callback(
     Output('booking-result', 'children'),
     Input('submit-booking', 'n_clicks'),
