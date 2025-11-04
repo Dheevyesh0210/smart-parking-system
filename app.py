@@ -11,6 +11,7 @@ from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import numpy as np
+from sqlalchemy import create_engine
 
 
 def convert_to_json_serializable(obj):
@@ -167,19 +168,17 @@ def log_activity(action, details, user="System"):
 
 
 def get_parking_data():
-    conn = get_db_connection()
-    if not conn:
-        return pd.DataFrame()
-
     try:
-        # FIX: Use the DATABASE_URL string directly instead of psycopg2 connection
+        # Create SQLAlchemy engine for PostgreSQL compatibility
+        engine = create_engine(DATABASE_URL)
+
         query = '''SELECT slot_id, zone, status, entry_time, vehicle_type, 
                    license_plate, customer_id, is_reserved, maintenance
                    FROM parking_slots ORDER BY slot_id'''
 
-        # CRITICAL FIX: Pass DATABASE_URL string directly to pandas
-        df = pd.read_sql_query(query, DATABASE_URL)
-        conn.close()
+        # Read data using SQLAlchemy engine
+        df = pd.read_sql_query(query, engine)
+        engine.dispose()
 
         print(f"=" * 80)
         print(f"=== DEBUG get_parking_data() ===")
@@ -187,7 +186,8 @@ def get_parking_data():
         if not df.empty:
             print(f"Status values from DB: {df['status'].unique()}")
             print(f"Maintenance values from DB: {df['maintenance'].unique()}")
-            print(f"Sample row: {df.iloc[0].to_dict()}")
+            print(f"Maintenance TRUE count: {df['maintenance'].sum()}")
+            print(f"First row: {df.iloc[0].to_dict()}")
         print(f"=" * 80)
 
         rows = []
@@ -197,7 +197,6 @@ def get_parking_data():
             duration_str = "-"
             duration_hours = 0
 
-            # CLEAR LOGIC: maintenance takes priority, otherwise use actual status
             if row['maintenance']:
                 status = "MAINTENANCE"
             else:
@@ -241,6 +240,12 @@ def get_parking_data():
             })
 
         result_df = pd.DataFrame(rows)
+        print(f"=== RESULT ===")
+        print(f"Returning {len(result_df)} rows")
+        if not result_df.empty:
+            print(f"Final Status counts: {result_df['Status'].value_counts().to_dict()}")
+        print(f"=" * 80)
+
         return result_df
 
     except Exception as e:

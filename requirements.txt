@@ -5,3 +5,11 @@ psycopg2-binary==2.9.10
 flask==3.0.0
 flask-cors==6.0.0
 gunicorn==23.0.0
+dash==2.17.1
+pandas==2.2.3
+plotly==5.18.0
+psycopg2-binary==2.9.10
+flask==3.0.0
+flask-cors==6.0.0
+gunicorn==23.0.0
+sqlalchemy==2.0.23
