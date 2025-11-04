@@ -416,6 +416,19 @@ def get_dynamic_rate():
 
 
 def get_statistics(df):
+    # CRITICAL DEBUGGING - This will show in Render logs
+    print("=" * 80)
+    print(f"DEBUG get_statistics():")
+    print(f"  DataFrame shape: {df.shape}")
+    print(f"  DataFrame empty: {df.empty}")
+
+    if not df.empty:
+        print(f"  Columns: {df.columns.tolist()}")
+        print(f"  Status column dtype: {df['Status'].dtype}")
+        print(f"  Status unique values BEFORE uppercase: {df['Status'].unique()}")
+        print(f"  First 3 Status values: {df['Status'].head(3).tolist()}")
+    print("=" * 80)
+
     if df.empty:
         return {
             'occupied': 0, 'available': 0, 'reserved': 0, 'maintenance': 0,
@@ -426,28 +439,11 @@ def get_statistics(df):
     # FIX: Ensure Status column is uppercase for consistent comparison
     df['Status'] = df['Status'].astype(str).str.upper()
 
-    # Now we can safely compare without needing .str.upper() every time
-    occupied = len(df[df['Status'] == 'OCCUPIED'])
-    available = len(df[df['Status'] == 'AVAILABLE'])
-    reserved = len(df[df['_is_reserved'] == True])
-    maintenance = len(df[df['_maintenance'] == True])
+    print(f"DEBUG: Status unique values AFTER uppercase: {df['Status'].unique()}")
+    print(f"DEBUG: Counting OCCUPIED: {len(df[df['Status'] == 'OCCUPIED'])}")
+    print(f"DEBUG: Counting AVAILABLE: {len(df[df['Status'] == 'AVAILABLE'])}")
 
-    occupancy_rate = (occupied / TOTAL_SLOTS) * 100 if TOTAL_SLOTS > 0 else 0
-    total_revenue = df['_revenue'].sum()
-    total_fines = df['_fine'].sum()
-    total_earnings = total_revenue + total_fines
-    occupied_df = df[df['Status'] == 'OCCUPIED']
-    avg_duration = occupied_df['_duration_hours'].mean() if len(occupied_df) > 0 else 0
-    overstay_count = len(df[df['_fine'] > 0])
-    turnover_rate = random.uniform(3, 8)
-    avg_wait = 0 if available > 20 else random.uniform(5, 30)
-
-    return {
-        'occupied': occupied, 'available': available, 'reserved': reserved, 'maintenance': maintenance,
-        'occupancy_rate': occupancy_rate, 'total_revenue': total_revenue, 'total_fines': total_fines,
-        'total_earnings': total_earnings, 'avg_duration': avg_duration, 'overstay_count': overstay_count,
-        'turnover_rate': turnover_rate, 'avg_wait': avg_wait
-    }
+    # Rest of the function...
 
 
 def check_alerts(df, stats):
