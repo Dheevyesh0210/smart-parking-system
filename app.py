@@ -431,7 +431,7 @@ def get_statistics(df):
     available = len(df[df['Status'] == 'AVAILABLE'])
     reserved = len(df[df['_is_reserved'] == True])
     maintenance = len(df[df['_maintenance'] == True])
-
+    
     occupancy_rate = (occupied / TOTAL_SLOTS) * 100 if TOTAL_SLOTS > 0 else 0
     total_revenue = df['_revenue'].sum()
     total_fines = df['_fine'].sum()
