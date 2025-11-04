@@ -178,6 +178,14 @@ def get_parking_data():
         df = pd.read_sql_query(query, conn)
         conn.close()
 
+        # DEBUG: Check what we got from database
+        print(f"=== DEBUG get_parking_data() ===")
+        print(f"Rows from database: {len(df)}")
+        if not df.empty:
+            print(f"Status values from DB: {df['status'].unique()}")
+            print(f"Sample row: {df.iloc[0].to_dict()}")
+        print(f"=================================")
+
         rows = []
         for _, row in df.iterrows():
             fine = 0
@@ -210,7 +218,7 @@ def get_parking_data():
             rows.append({
                 "Slot ID": row['slot_id'],
                 "Zone": row['zone'],
-                "Status": status,  # Already uppercase now
+                "Status": status,
                 "Vehicle": row['vehicle_type'] if status == 'OCCUPIED' else "-",
                 "License": row['license_plate'] if status == 'OCCUPIED' else "-",
                 "Customer ID": row['customer_id'] if status == 'OCCUPIED' else "-",
@@ -227,10 +235,20 @@ def get_parking_data():
                 "_maintenance": row['maintenance']
             })
 
-        return pd.DataFrame(rows)
+        # DEBUG: Check what we're returning
+        result_df = pd.DataFrame(rows)
+        print(f"=== DEBUG get_parking_data() RESULT ===")
+        print(f"Returning {len(result_df)} rows")
+        if not result_df.empty:
+            print(f"Status column: {result_df['Status'].value_counts().to_dict()}")
+        print(f"=======================================")
+
+        return result_df
 
     except Exception as e:
         print(f"Get parking data error: {e}")
+        import traceback
+        traceback.print_exc()  # This will print the full error
         return pd.DataFrame()
 
 
