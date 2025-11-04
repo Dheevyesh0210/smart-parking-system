@@ -178,6 +178,14 @@ def get_parking_data():
         df = pd.read_sql_query(query, conn)
         conn.close()
 
+        # DEBUG: Check what we got from database
+        print(f"=== DEBUG get_parking_data() ===")
+        print(f"Rows from database: {len(df)}")
+        if not df.empty:
+            print(f"Status values from DB: {df['status'].unique()}")
+            print(f"Sample row: {df.iloc[0].to_dict()}")
+        print(f"=================================")
+
         rows = []
         for _, row in df.iterrows():
             fine = 0
@@ -210,7 +218,7 @@ def get_parking_data():
             rows.append({
                 "Slot ID": row['slot_id'],
                 "Zone": row['zone'],
-                "Status": status,  # Already uppercase now
+                "Status": status,
                 "Vehicle": row['vehicle_type'] if status == 'OCCUPIED' else "-",
                 "License": row['license_plate'] if status == 'OCCUPIED' else "-",
                 "Customer ID": row['customer_id'] if status == 'OCCUPIED' else "-",
@@ -227,10 +235,20 @@ def get_parking_data():
                 "_maintenance": row['maintenance']
             })
 
-        return pd.DataFrame(rows)
+        # DEBUG: Check what we're returning
+        result_df = pd.DataFrame(rows)
+        print(f"=== DEBUG get_parking_data() RESULT ===")
+        print(f"Returning {len(result_df)} rows")
+        if not result_df.empty:
+            print(f"Status column: {result_df['Status'].value_counts().to_dict()}")
+        print(f"=======================================")
+
+        return result_df
 
     except Exception as e:
         print(f"Get parking data error: {e}")
+        import traceback
+        traceback.print_exc()  # This will print the full error
         return pd.DataFrame()
 
 
@@ -439,11 +457,28 @@ def get_statistics(df):
     # FIX: Ensure Status column is uppercase for consistent comparison
     df['Status'] = df['Status'].astype(str).str.upper()
 
-    print(f"DEBUG: Status unique values AFTER uppercase: {df['Status'].unique()}")
-    print(f"DEBUG: Counting OCCUPIED: {len(df[df['Status'] == 'OCCUPIED'])}")
-    print(f"DEBUG: Counting AVAILABLE: {len(df[df['Status'] == 'AVAILABLE'])}")
+    # Now we can safely compare without needing .str.upper() every time
+    occupied = len(df[df['Status'] == 'OCCUPIED'])
+    available = len(df[df['Status'] == 'AVAILABLE'])
+    reserved = len(df[df['_is_reserved'] == True])
+    maintenance = len(df[df['_maintenance'] == True])
 
-    # Rest of the function...
+    occupancy_rate = (occupied / TOTAL_SLOTS) * 100 if TOTAL_SLOTS > 0 else 0
+    total_revenue = df['_revenue'].sum()
+    total_fines = df['_fine'].sum()
+    total_earnings = total_revenue + total_fines
+    occupied_df = df[df['Status'] == 'OCCUPIED']
+    avg_duration = occupied_df['_duration_hours'].mean() if len(occupied_df) > 0 else 0
+    overstay_count = len(df[df['_fine'] > 0])
+    turnover_rate = random.uniform(3, 8)
+    avg_wait = 0 if available > 20 else random.uniform(5, 30)
+
+    return {
+        'occupied': occupied, 'available': available, 'reserved': reserved, 'maintenance': maintenance,
+        'occupancy_rate': occupancy_rate, 'total_revenue': total_revenue, 'total_fines': total_fines,
+        'total_earnings': total_earnings, 'avg_duration': avg_duration, 'overstay_count': overstay_count,
+        'turnover_rate': turnover_rate, 'avg_wait': avg_wait
+    }
 
 
 def check_alerts(df, stats):
