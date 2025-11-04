@@ -11,7 +11,6 @@ from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import numpy as np
-from sqlalchemy import create_engine
 
 
 def convert_to_json_serializable(obj):
@@ -168,27 +167,16 @@ def log_activity(action, details, user="System"):
 
 
 def get_parking_data():
-    try:
-        # Create SQLAlchemy engine for PostgreSQL compatibility
-        engine = create_engine(DATABASE_URL)
+    conn = get_db_connection()
+    if not conn:
+        return pd.DataFrame()
 
+    try:
         query = '''SELECT slot_id, zone, status, entry_time, vehicle_type, 
                    license_plate, customer_id, is_reserved, maintenance
                    FROM parking_slots ORDER BY slot_id'''
-
-        # Read data using SQLAlchemy engine
-        df = pd.read_sql_query(query, engine)
-        engine.dispose()
-
-        print(f"=" * 80)
-        print(f"=== DEBUG get_parking_data() ===")
-        print(f"Rows from database: {len(df)}")
-        if not df.empty:
-            print(f"Status values from DB: {df['status'].unique()}")
-            print(f"Maintenance values from DB: {df['maintenance'].unique()}")
-            print(f"Maintenance TRUE count: {df['maintenance'].sum()}")
-            print(f"First row: {df.iloc[0].to_dict()}")
-        print(f"=" * 80)
+        df = pd.read_sql_query(query, conn)
+        conn.close()
 
         rows = []
         for _, row in df.iterrows():
@@ -197,12 +185,11 @@ def get_parking_data():
             duration_str = "-"
             duration_hours = 0
 
+            status = row['status']
             if row['maintenance']:
-                status = "MAINTENANCE"
-            else:
-                status = str(row['status']).upper() if row['status'] else 'AVAILABLE'
+                status = "maintenance"
 
-            if status == 'OCCUPIED' and row['entry_time']:
+            if status == 'occupied' and row['entry_time']:
                 entry_dt = pd.to_datetime(row['entry_time'])
                 duration_seconds = (datetime.datetime.now() - entry_dt).total_seconds()
                 duration_hours = duration_seconds / 3600
@@ -222,13 +209,13 @@ def get_parking_data():
             rows.append({
                 "Slot ID": row['slot_id'],
                 "Zone": row['zone'],
-                "Status": status,
-                "Vehicle": row['vehicle_type'] if status == 'OCCUPIED' else "-",
-                "License": row['license_plate'] if status == 'OCCUPIED' else "-",
-                "Customer ID": row['customer_id'] if status == 'OCCUPIED' else "-",
+                "Status": status.upper(),
+                "Vehicle": row['vehicle_type'] if status == 'occupied' else "-",
+                "License": row['license_plate'] if status == 'occupied' else "-",
+                "Customer ID": row['customer_id'] if status == 'occupied' else "-",
                 "Entry Time": str(row['entry_time']) if row['entry_time'] else "-",
                 "Duration": duration_str,
-                "Rate": f"Rs {get_dynamic_rate()}/hr" if status == 'OCCUPIED' else "-",
+                "Rate": f"Rs {get_dynamic_rate()}/hr" if status == 'occupied' else "-",
                 "Parking Fee": f"Rs {revenue:.0f}",
                 "Overstay Fine": f"Rs {fine:.0f}",
                 "Total": f"Rs {(revenue + fine):.0f}",
@@ -239,19 +226,10 @@ def get_parking_data():
                 "_maintenance": row['maintenance']
             })
 
-        result_df = pd.DataFrame(rows)
-        print(f"=== RESULT ===")
-        print(f"Returning {len(result_df)} rows")
-        if not result_df.empty:
-            print(f"Final Status counts: {result_df['Status'].value_counts().to_dict()}")
-        print(f"=" * 80)
-
-        return result_df
+        return pd.DataFrame(rows)
 
     except Exception as e:
         print(f"Get parking data error: {e}")
-        import traceback
-        traceback.print_exc()
         return pd.DataFrame()
 
 
@@ -334,17 +312,9 @@ def reset_all_slots():
     """Free up all parking slots"""
     conn = get_db_connection()
     if not conn:
-        print("ERROR: No database connection in reset_all_slots")
         return False
     try:
         cur = conn.cursor()
-
-        # Debug: check before
-        cur.execute('SELECT COUNT(*) as total FROM parking_slots WHERE maintenance = TRUE')
-        before = cur.fetchone()
-        print(f"BEFORE RESET: Maintenance slots = {before['total']}")
-
-        # Reset query - EXPLICITLY set maintenance to FALSE
         cur.execute('''UPDATE parking_slots 
                       SET status = 'available', 
                           entry_time = NULL,
@@ -353,28 +323,17 @@ def reset_all_slots():
                           customer_id = NULL,
                           is_reserved = FALSE,
                           maintenance = FALSE,
-                          updated_at = CURRENT_TIMESTAMP
-                      WHERE slot_id IS NOT NULL''')
-
-        affected_rows = cur.rowcount
+                          updated_at = CURRENT_TIMESTAMP''')
         conn.commit()
-
-        # Debug: check after
-        cur.execute('SELECT COUNT(*) as total FROM parking_slots WHERE maintenance = TRUE')
-        after = cur.fetchone()
-        print(f"AFTER RESET: Maintenance slots = {after['total']}, Total reset = {affected_rows}")
-
+        affected_rows = cur.rowcount
         cur.close()
         conn.close()
         log_activity("System Reset", f"All {affected_rows} parking slots reset to available", "Admin")
         return True
     except Exception as e:
         print(f"Reset all slots error: {e}")
-        import traceback
-        traceback.print_exc()
         if conn:
             conn.rollback()
-            conn.close()
         return False
 
 
@@ -456,19 +415,6 @@ def get_dynamic_rate():
 
 
 def get_statistics(df):
-    # CRITICAL DEBUGGING - This will show in Render logs
-    print("=" * 80)
-    print(f"DEBUG get_statistics():")
-    print(f"  DataFrame shape: {df.shape}")
-    print(f"  DataFrame empty: {df.empty}")
-
-    if not df.empty:
-        print(f"  Columns: {df.columns.tolist()}")
-        print(f"  Status column dtype: {df['Status'].dtype}")
-        print(f"  Status unique values BEFORE uppercase: {df['Status'].unique()}")
-        print(f"  First 3 Status values: {df['Status'].head(3).tolist()}")
-    print("=" * 80)
-
     if df.empty:
         return {
             'occupied': 0, 'available': 0, 'reserved': 0, 'maintenance': 0,
@@ -476,15 +422,10 @@ def get_statistics(df):
             'avg_duration': 0, 'overstay_count': 0, 'turnover_rate': 0, 'avg_wait': 0
         }
 
-    # FIX: Ensure Status column is uppercase for consistent comparison
-    df['Status'] = df['Status'].astype(str).str.upper()
-
-    # Now we can safely compare without needing .str.upper() every time
     occupied = len(df[df['Status'] == 'OCCUPIED'])
     available = len(df[df['Status'] == 'AVAILABLE'])
     reserved = len(df[df['_is_reserved'] == True])
     maintenance = len(df[df['_maintenance'] == True])
-
     occupancy_rate = (occupied / TOTAL_SLOTS) * 100 if TOTAL_SLOTS > 0 else 0
     total_revenue = df['_revenue'].sum()
     total_fines = df['_fine'].sum()
@@ -582,7 +523,6 @@ def create_booking_api():
             return jsonify({'success': False, 'error': 'Missing required fields'}), 400
 
         df = get_parking_data()
-        # FIX: Status is already uppercase from get_parking_data()
         available_df = df[df['Status'] == 'AVAILABLE']
         if len(available_df) == 0:
             return jsonify({'success': False, 'error': 'No slots available'}), 400
@@ -781,84 +721,6 @@ def render_admin_controls():
     ])
 
 
-def render_parking_grid(df):
-    """Render visual parking grid showing all 100 slots by zone"""
-    zones = ['Zone-A', 'Zone-B', 'Zone-C', 'Zone-D']
-
-    zone_grids = []
-    for zone in zones:
-        zone_df = df[df['Zone'] == zone]
-
-        # Create grid items for this zone
-        grid_items = []
-        for _, row in zone_df.iterrows():
-            status = row['Status'].upper()  # Ensure uppercase
-            slot_id = row['Slot ID']
-
-            # Determine color based on status
-            if status == 'OCCUPIED':
-                bg_color = DANGER_COLOR
-                icon = '🚗'
-                tooltip = f"{slot_id}: {row['Vehicle']} - {row['License']}"
-            elif status == 'MAINTENANCE':
-                bg_color = WARNING_COLOR
-                icon = '🔧'
-                tooltip = f"{slot_id}: Under Maintenance"
-            elif row.get('_is_reserved'):
-                bg_color = INFO_COLOR
-                icon = '📅'
-                tooltip = f"{slot_id}: Reserved"
-            else:
-                bg_color = SUCCESS_COLOR
-                icon = '✓'
-                tooltip = f"{slot_id}: Available"
-
-            grid_items.append(
-                html.Div([
-                    html.Div(icon, style={'fontSize': '16px'}),
-                    html.Div(slot_id, style={'fontSize': '10px', 'marginTop': '2px'})
-                ], style={
-                    'backgroundColor': bg_color,
-                    'padding': '8px',
-                    'borderRadius': '6px',
-                    'textAlign': 'center',
-                    'color': 'white',
-                    'cursor': 'pointer',
-                    'minWidth': '60px',
-                    'minHeight': '50px',
-                    'display': 'flex',
-                    'flexDirection': 'column',
-                    'justifyContent': 'center',
-                    'alignItems': 'center'
-                }, title=tooltip)
-            )
-
-        zone_grids.append(
-            html.Div([
-                html.H4(zone, style={'color': TEXT_PRIMARY, 'marginBottom': '10px'}),
-                html.Div(grid_items, style={
-                    'display': 'grid',
-                    'gridTemplateColumns': 'repeat(5, 1fr)',
-                    'gap': '8px',
-                    'marginBottom': '20px'
-                })
-            ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px'})
-        )
-
-    return html.Div([
-        html.H3("🅿️ Live Parking Grid", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
-        html.Div([
-            html.Div([
-                html.Span('🚗 Occupied', style={'marginRight': '15px', 'color': DANGER_COLOR}),
-                html.Span('✓ Available', style={'marginRight': '15px', 'color': SUCCESS_COLOR}),
-                html.Span('📅 Reserved', style={'marginRight': '15px', 'color': INFO_COLOR}),
-                html.Span('🔧 Maintenance', style={'color': WARNING_COLOR})
-            ], style={'marginBottom': '20px', 'fontSize': '14px', 'color': TEXT_PRIMARY})
-        ]),
-        html.Div(zone_grids, style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr', 'gap': '20px'})
-    ], style=CHART_CARD)
-
-
 def render_dashboard_content(df, stats):
     occupancy_history.append(stats['occupancy_rate'])
     revenue_history.append(stats['total_earnings'])
@@ -868,7 +730,6 @@ def render_dashboard_content(df, stats):
     zone_data = []
     for zone in ['Zone-A', 'Zone-B', 'Zone-C', 'Zone-D']:
         zone_df = df[df['Zone'] == zone]
-        # FIX: Status is already uppercase from get_parking_data()
         available = len(zone_df[zone_df['Status'] == 'AVAILABLE'])
         total = len(zone_df)
         zone_data.append({'zone': zone, 'available': available, 'total': total,
@@ -956,8 +817,6 @@ def render_dashboard_content(df, stats):
             ], style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr 1fr 1fr', 'gap': '15px',
                       'marginBottom': '20px'})
         ], style=CHART_CARD),
-
-        render_parking_grid(df),
 
         html.Div([
             html.H3("All Parking Slots", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
@@ -1305,7 +1164,6 @@ def submit_booking(n_clicks, name, phone, vehicle, license_plate, duration):
                                    'borderRadius': '6px'})
 
         df = get_parking_data()
-        # FIX: Status is already uppercase from get_parking_data()
         available_df = df[df['Status'] == 'AVAILABLE']
 
         if len(available_df) == 0:
