@@ -193,10 +193,11 @@ def get_parking_data():
             duration_str = "-"
             duration_hours = 0
 
-            # FIX: Convert status to uppercase immediately
-            status = str(row['status']).upper() if row['status'] else 'AVAILABLE'
-            if row['maintenance'] and status != 'OCCUPIED':
+            # CLEAR LOGIC: maintenance takes priority, otherwise use actual status
+            if row['maintenance']:
                 status = "MAINTENANCE"
+            else:
+                status = str(row['status']).upper() if row['status'] else 'AVAILABLE'
 
             if status == 'OCCUPIED' and row['entry_time']:
                 entry_dt = pd.to_datetime(row['entry_time'])
