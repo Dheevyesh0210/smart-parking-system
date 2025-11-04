@@ -172,19 +172,23 @@ def get_parking_data():
         return pd.DataFrame()
 
     try:
+        # FIX: Use the DATABASE_URL string directly instead of psycopg2 connection
         query = '''SELECT slot_id, zone, status, entry_time, vehicle_type, 
                    license_plate, customer_id, is_reserved, maintenance
                    FROM parking_slots ORDER BY slot_id'''
-        df = pd.read_sql_query(query, conn)
+
+        # CRITICAL FIX: Pass DATABASE_URL string directly to pandas
+        df = pd.read_sql_query(query, DATABASE_URL)
         conn.close()
 
-        # DEBUG: Check what we got from database
+        print(f"=" * 80)
         print(f"=== DEBUG get_parking_data() ===")
         print(f"Rows from database: {len(df)}")
         if not df.empty:
             print(f"Status values from DB: {df['status'].unique()}")
+            print(f"Maintenance values from DB: {df['maintenance'].unique()}")
             print(f"Sample row: {df.iloc[0].to_dict()}")
-        print(f"=================================")
+        print(f"=" * 80)
 
         rows = []
         for _, row in df.iterrows():
@@ -236,20 +240,13 @@ def get_parking_data():
                 "_maintenance": row['maintenance']
             })
 
-        # DEBUG: Check what we're returning
         result_df = pd.DataFrame(rows)
-        print(f"=== DEBUG get_parking_data() RESULT ===")
-        print(f"Returning {len(result_df)} rows")
-        if not result_df.empty:
-            print(f"Status column: {result_df['Status'].value_counts().to_dict()}")
-        print(f"=======================================")
-
         return result_df
 
     except Exception as e:
         print(f"Get parking data error: {e}")
         import traceback
-        traceback.print_exc()  # This will print the full error
+        traceback.print_exc()
         return pd.DataFrame()
 
 
