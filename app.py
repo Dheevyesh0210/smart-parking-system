@@ -185,11 +185,12 @@ def get_parking_data():
             duration_str = "-"
             duration_hours = 0
 
-            status = row['status']
+            # FIX: Convert status to uppercase immediately
+            status = str(row['status']).upper() if row['status'] else 'AVAILABLE'
             if row['maintenance']:
-                status = "maintenance"
+                status = "MAINTENANCE"
 
-            if status == 'occupied' and row['entry_time']:
+            if status == 'OCCUPIED' and row['entry_time']:
                 entry_dt = pd.to_datetime(row['entry_time'])
                 duration_seconds = (datetime.datetime.now() - entry_dt).total_seconds()
                 duration_hours = duration_seconds / 3600
@@ -209,13 +210,13 @@ def get_parking_data():
             rows.append({
                 "Slot ID": row['slot_id'],
                 "Zone": row['zone'],
-                "Status": status.upper(),
-                "Vehicle": row['vehicle_type'] if status == 'occupied' else "-",
-                "License": row['license_plate'] if status == 'occupied' else "-",
-                "Customer ID": row['customer_id'] if status == 'occupied' else "-",
+                "Status": status,  # Already uppercase now
+                "Vehicle": row['vehicle_type'] if status == 'OCCUPIED' else "-",
+                "License": row['license_plate'] if status == 'OCCUPIED' else "-",
+                "Customer ID": row['customer_id'] if status == 'OCCUPIED' else "-",
                 "Entry Time": str(row['entry_time']) if row['entry_time'] else "-",
                 "Duration": duration_str,
-                "Rate": f"Rs {get_dynamic_rate()}/hr" if status == 'occupied' else "-",
+                "Rate": f"Rs {get_dynamic_rate()}/hr" if status == 'OCCUPIED' else "-",
                 "Parking Fee": f"Rs {revenue:.0f}",
                 "Overstay Fine": f"Rs {fine:.0f}",
                 "Total": f"Rs {(revenue + fine):.0f}",
@@ -422,15 +423,20 @@ def get_statistics(df):
             'avg_duration': 0, 'overstay_count': 0, 'turnover_rate': 0, 'avg_wait': 0
         }
 
-    occupied = len(df[df['Status'].str.upper() == 'OCCUPIED'])
-    available = len(df[df['Status'].str.upper() == 'AVAILABLE'])
+    # FIX: Ensure Status column is uppercase for consistent comparison
+    df['Status'] = df['Status'].astype(str).str.upper()
+
+    # Now we can safely compare without needing .str.upper() every time
+    occupied = len(df[df['Status'] == 'OCCUPIED'])
+    available = len(df[df['Status'] == 'AVAILABLE'])
     reserved = len(df[df['_is_reserved'] == True])
     maintenance = len(df[df['_maintenance'] == True])
+
     occupancy_rate = (occupied / TOTAL_SLOTS) * 100 if TOTAL_SLOTS > 0 else 0
     total_revenue = df['_revenue'].sum()
     total_fines = df['_fine'].sum()
     total_earnings = total_revenue + total_fines
-    occupied_df = df[df['Status'].str.upper() == 'OCCUPIED']
+    occupied_df = df[df['Status'] == 'OCCUPIED']
     avg_duration = occupied_df['_duration_hours'].mean() if len(occupied_df) > 0 else 0
     overstay_count = len(df[df['_fine'] > 0])
     turnover_rate = random.uniform(3, 8)
@@ -523,7 +529,8 @@ def create_booking_api():
             return jsonify({'success': False, 'error': 'Missing required fields'}), 400
 
         df = get_parking_data()
-        available_df = df[df['Status'].str.upper() == 'AVAILABLE']
+        # FIX: Status is already uppercase from get_parking_data()
+        available_df = df[df['Status'] == 'AVAILABLE']
         if len(available_df) == 0:
             return jsonify({'success': False, 'error': 'No slots available'}), 400
 
@@ -732,15 +739,15 @@ def render_parking_grid(df):
         # Create grid items for this zone
         grid_items = []
         for _, row in zone_df.iterrows():
-            status = row['Status'].lower()
+            status = row['Status'].upper()  # Ensure uppercase
             slot_id = row['Slot ID']
 
             # Determine color based on status
-            if status == 'occupied':
+            if status == 'OCCUPIED':
                 bg_color = DANGER_COLOR
                 icon = '🚗'
                 tooltip = f"{slot_id}: {row['Vehicle']} - {row['License']}"
-            elif status == 'maintenance':
+            elif status == 'MAINTENANCE':
                 bg_color = WARNING_COLOR
                 icon = '🔧'
                 tooltip = f"{slot_id}: Under Maintenance"
@@ -808,7 +815,8 @@ def render_dashboard_content(df, stats):
     zone_data = []
     for zone in ['Zone-A', 'Zone-B', 'Zone-C', 'Zone-D']:
         zone_df = df[df['Zone'] == zone]
-        available = len(zone_df[zone_df['Status'].str.upper() == 'AVAILABLE'])
+        # FIX: Status is already uppercase from get_parking_data()
+        available = len(zone_df[zone_df['Status'] == 'AVAILABLE'])
         total = len(zone_df)
         zone_data.append({'zone': zone, 'available': available, 'total': total,
                           'percentage': (available / total * 100) if total > 0 else 0})
@@ -1244,7 +1252,8 @@ def submit_booking(n_clicks, name, phone, vehicle, license_plate, duration):
                                    'borderRadius': '6px'})
 
         df = get_parking_data()
-        available_df = df[df['Status'].str.upper() == 'AVAILABLE']
+        # FIX: Status is already uppercase from get_parking_data()
+        available_df = df[df['Status'] == 'AVAILABLE']
 
         if len(available_df) == 0:
             return html.Div("❌ No slots available",
