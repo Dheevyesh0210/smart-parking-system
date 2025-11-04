@@ -195,7 +195,7 @@ def get_parking_data():
 
             # FIX: Convert status to uppercase immediately
             status = str(row['status']).upper() if row['status'] else 'AVAILABLE'
-            if row['maintenance']:
+            if row['maintenance'] and status != 'OCCUPIED':
                 status = "MAINTENANCE"
 
             if status == 'OCCUPIED' and row['entry_time']:
@@ -331,9 +331,17 @@ def reset_all_slots():
     """Free up all parking slots"""
     conn = get_db_connection()
     if not conn:
+        print("ERROR: No database connection in reset_all_slots")
         return False
     try:
         cur = conn.cursor()
+
+        # Debug: check before
+        cur.execute('SELECT COUNT(*) as total FROM parking_slots WHERE maintenance = TRUE')
+        before = cur.fetchone()
+        print(f"BEFORE RESET: Maintenance slots = {before['total']}")
+
+        # Reset query - EXPLICITLY set maintenance to FALSE
         cur.execute('''UPDATE parking_slots 
                       SET status = 'available', 
                           entry_time = NULL,
@@ -342,17 +350,28 @@ def reset_all_slots():
                           customer_id = NULL,
                           is_reserved = FALSE,
                           maintenance = FALSE,
-                          updated_at = CURRENT_TIMESTAMP''')
-        conn.commit()
+                          updated_at = CURRENT_TIMESTAMP
+                      WHERE slot_id IS NOT NULL''')
+
         affected_rows = cur.rowcount
+        conn.commit()
+
+        # Debug: check after
+        cur.execute('SELECT COUNT(*) as total FROM parking_slots WHERE maintenance = TRUE')
+        after = cur.fetchone()
+        print(f"AFTER RESET: Maintenance slots = {after['total']}, Total reset = {affected_rows}")
+
         cur.close()
         conn.close()
         log_activity("System Reset", f"All {affected_rows} parking slots reset to available", "Admin")
         return True
     except Exception as e:
         print(f"Reset all slots error: {e}")
+        import traceback
+        traceback.print_exc()
         if conn:
             conn.rollback()
+            conn.close()
         return False
 
 
