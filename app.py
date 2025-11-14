@@ -36,8 +36,10 @@ PEAK_HOURS = [(7, 10), (17, 20)]
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
-    print("WARNING: DATABASE_URL not set")
+    print("WARNING: DATABASE_URL not set, using default")
     DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/parking_system'
+
+print(f"Connecting to database: {DATABASE_URL[:50]}...")
 
 ADMIN_CREDENTIALS = {"admin": "admin123", "operator": "operator123"}
 USER_ROLES = {"admin": "admin", "operator": "operator"}
@@ -61,12 +63,13 @@ def get_db_connection():
 def init_database():
     conn = get_db_connection()
     if not conn:
-        print("Failed to connect to database")
+        print("❌ Failed to connect to database")
         return False
 
     try:
         cur = conn.cursor()
 
+        # Create parking_slots table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS parking_slots (
                 slot_id VARCHAR(10) PRIMARY KEY,
@@ -82,6 +85,7 @@ def init_database():
             )
         ''')
 
+        # Create bookings table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS bookings (
                 id VARCHAR(20) PRIMARY KEY,
@@ -99,6 +103,7 @@ def init_database():
             )
         ''')
 
+        # Create activity_log table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS activity_log (
                 id SERIAL PRIMARY KEY,
@@ -109,18 +114,22 @@ def init_database():
             )
         ''')
 
+        # Check if parking_slots has data
         cur.execute('SELECT COUNT(*) FROM parking_slots')
         count = cur.fetchone()['count']
 
         if count == 0:
             print("Initializing parking slots...")
+            # Initialize all 100 parking slots
             for i in range(TOTAL_SLOTS):
                 slot_id = f"P{str(i + 1).zfill(3)}"
-                zone = f"Zone-{chr(65 + i // 25)}"
+                zone = f"Zone-{chr(65 + i // 25)}"  # Zone-A, Zone-B, Zone-C, Zone-D
                 cur.execute('INSERT INTO parking_slots (slot_id, zone, status) VALUES (%s, %s, %s)',
                             (slot_id, zone, 'available'))
 
-            for i in range(35):
+            # Add some initial occupied slots for demo
+            print("Adding demo occupied slots...")
+            for i in range(35):  # Occupy first 35 slots
                 slot_id = f"P{str(i + 1).zfill(3)}"
                 entry_time = datetime.datetime.now() - datetime.timedelta(hours=random.uniform(0, 8))
                 vehicle_type = random.choice(["Car", "Bike", "SUV"])
@@ -135,11 +144,12 @@ def init_database():
         conn.commit()
         cur.close()
         conn.close()
-        print("Database initialized successfully")
+        print("✅ Database initialized successfully")
+        print(f"✅ Total slots in database: {count if count > 0 else TOTAL_SLOTS}")
         return True
 
     except Exception as e:
-        print(f"Database initialization error: {e}")
+        print(f"❌ Database initialization error: {e}")
         if conn:
             conn.rollback()
             cur.close()
@@ -167,8 +177,10 @@ def log_activity(action, details, user="System"):
 
 
 def get_parking_data():
+    """Fetch parking data from PostgreSQL and calculate statistics"""
     conn = get_db_connection()
     if not conn:
+        print("❌ Cannot get parking data - no database connection")
         return pd.DataFrame()
 
     try:
@@ -177,6 +189,10 @@ def get_parking_data():
                    FROM parking_slots ORDER BY slot_id'''
         df = pd.read_sql_query(query, conn)
         conn.close()
+
+        if df.empty:
+            print("⚠️ No parking data found in database")
+            return pd.DataFrame()
 
         rows = []
         for _, row in df.iterrows():
@@ -226,10 +242,12 @@ def get_parking_data():
                 "_maintenance": row['maintenance']
             })
 
-        return pd.DataFrame(rows)
+        result_df = pd.DataFrame(rows)
+        print(f"✅ Retrieved {len(result_df)} parking slots from database")
+        return result_df
 
     except Exception as e:
-        print(f"Get parking data error: {e}")
+        print(f"❌ Get parking data error: {e}")
         return pd.DataFrame()
 
 
@@ -329,6 +347,7 @@ def reset_all_slots():
         cur.close()
         conn.close()
         log_activity("System Reset", f"All {affected_rows} parking slots reset to available", "Admin")
+        print(f"✅ Reset {affected_rows} parking slots")
         return True
     except Exception as e:
         print(f"Reset all slots error: {e}")
@@ -393,6 +412,7 @@ def simulate_parking_activity():
         cur.close()
         conn.close()
         log_activity("Demo Activity", f"Added {len(slots)} occupied slots for demo", "Admin")
+        print(f"✅ Added {len(slots)} occupied slots for simulation")
         return True
     except Exception as e:
         print(f"Simulate activity error: {e}")
@@ -415,7 +435,9 @@ def get_dynamic_rate():
 
 
 def get_statistics(df):
+    """Calculate statistics from parking data"""
     if df.empty:
+        print("⚠️ Empty dataframe in get_statistics")
         return {
             'occupied': 0, 'available': 0, 'reserved': 0, 'maintenance': 0,
             'occupancy_rate': 0, 'total_revenue': 0, 'total_fines': 0, 'total_earnings': 0,
@@ -436,12 +458,16 @@ def get_statistics(df):
     turnover_rate = random.uniform(3, 8)
     avg_wait = 0 if available > 20 else random.uniform(5, 30)
 
-    return {
+    stats_result = {
         'occupied': occupied, 'available': available, 'reserved': reserved, 'maintenance': maintenance,
         'occupancy_rate': occupancy_rate, 'total_revenue': total_revenue, 'total_fines': total_fines,
         'total_earnings': total_earnings, 'avg_duration': avg_duration, 'overstay_count': overstay_count,
         'turnover_rate': turnover_rate, 'avg_wait': avg_wait
     }
+
+    print(
+        f"📊 Stats - Available: {available}, Occupied: {occupied}, Occupancy: {occupancy_rate:.1f}%, Revenue: Rs {total_earnings:.0f}")
+    return stats_result
 
 
 def check_alerts(df, stats):
@@ -473,11 +499,14 @@ def check_alerts(df, stats):
 
 
 # Initialize Database
-print("Initializing database...")
+print("=" * 60)
+print("🚀 Initializing Parking Management System")
+print("=" * 60)
 if init_database():
-    print("Database ready!")
+    print("✅ System ready!")
 else:
-    print("Database initialization failed!")
+    print("❌ System initialization failed!")
+print("=" * 60)
 
 # Dash App Setup
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -600,101 +629,88 @@ def login_layout():
                 html.Button('Admin Login', id='login-button', n_clicks=0,
                             style={'width': '100%', 'padding': '12px', 'backgroundColor': ACCENT_COLOR,
                                    'color': 'white', 'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
-                                   'marginBottom': '10px'}),
-                html.Button('Public Booking', id='public-booking-button', n_clicks=0,
-                            style={'width': '100%', 'padding': '12px', 'backgroundColor': SUCCESS_COLOR,
-                                   'color': 'white', 'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer'}),
-                html.Div(id='login-alert', style={'marginTop': '15px', 'color': DANGER_COLOR})
-            ])
-        ], style={'maxWidth': '400px', 'margin': '100px auto', 'padding': '40px',
-                  'backgroundColor': CARD_BG, 'borderRadius': '12px', 'boxShadow': '0 10px 25px rgba(0,0,0,0.3)'})
-    ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
+                                   'fontWeight': 'bold'}),
+                html.Div(id='login-message', style={'marginTop': '15px', 'color': DANGER_COLOR})
+            ], style={'maxWidth': '400px', 'margin': '0 auto'})
+        ], style={'backgroundColor': CARD_BG, 'padding': '40px', 'borderRadius': '12px', 'maxWidth': '500px',
+                  'margin': '100px auto'})
+    ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh', 'padding': '20px'})
+
+
+def admin_layout():
+    return html.Div([
+        html.Div([
+            html.Div([
+                html.H1("🚗 Parking Management System", style={'color': TEXT_PRIMARY, 'margin': 0}),
+                html.Button('Logout', id='logout-button', n_clicks=0,
+                            style={'padding': '10px 20px', 'backgroundColor': DANGER_COLOR, 'color': 'white',
+                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer'})
+            ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center',
+                      'padding': '20px', 'backgroundColor': CARD_BG, 'borderRadius': '12px', 'marginBottom': '20px'}),
+
+            html.Div([
+                html.Button('📊 Dashboard', id='nav-dashboard', n_clicks=0,
+                            style={'padding': '10px 20px', 'backgroundColor': ACCENT_COLOR, 'color': 'white',
+                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
+                                   'marginRight': '10px'}),
+                html.Button('📝 Bookings', id='nav-bookings', n_clicks=0,
+                            style={'padding': '10px 20px', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY,
+                                   'border': '1px solid #334155', 'borderRadius': '6px', 'cursor': 'pointer',
+                                   'marginRight': '10px'}),
+                html.Button('📋 Activity Log', id='nav-activity', n_clicks=0,
+                            style={'padding': '10px 20px', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY,
+                                   'border': '1px solid #334155', 'borderRadius': '6px', 'cursor': 'pointer',
+                                   'marginRight': '10px'}),
+                html.Button('⚙️ Admin Tools', id='nav-admin-tools', n_clicks=0,
+                            style={'padding': '10px 20px', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY,
+                                   'border': '1px solid #334155', 'borderRadius': '6px', 'cursor': 'pointer'})
+            ], style={'padding': '15px', 'backgroundColor': CARD_BG, 'borderRadius': '12px', 'marginBottom': '20px'}),
+
+            html.Div(id='admin-content')
+        ], style={'maxWidth': '1400px', 'margin': '0 auto'}),
+
+        dcc.Interval(id='interval-component', interval=5000, n_intervals=0),
+        dcc.Store(id='view-store', data='dashboard')
+    ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh', 'padding': '20px'})
 
 
 def public_booking_layout():
     return html.Div([
         html.Div([
-            html.H1("🅿️ Book Your Parking Spot", style={'color': TEXT_PRIMARY, 'textAlign': 'center'}),
-            html.Button('← Back to Login', id='back-to-login', n_clicks=0,
-                        style={'padding': '8px 16px', 'backgroundColor': TEXT_SECONDARY,
-                               'color': 'white', 'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer'})
-        ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center',
-                  'padding': '20px', 'backgroundColor': CARD_BG, 'marginBottom': '20px'}),
+            html.H1("🚗 Park Smart - Online Booking", style={'color': TEXT_PRIMARY, 'textAlign': 'center'}),
+            html.Div(id='public-stats', style={'display': 'flex', 'marginBottom': '30px'}),
 
-        html.Div([
             html.Div([
-                html.H3("Quick Stats", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
-                html.Div(id='public-stats', style={'marginBottom': '20px'}),
-
-                html.H3("Book Now", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
-                dcc.Input(id='booking-name', type='text', placeholder='Your Name',
-                          style={'width': '100%', 'padding': '12px', 'marginBottom': '10px',
-                                 'borderRadius': '6px', 'border': '1px solid #334155', 'backgroundColor': CARD_BG,
-                                 'color': TEXT_PRIMARY}),
-                dcc.Input(id='booking-phone', type='text', placeholder='Phone Number',
-                          style={'width': '100%', 'padding': '12px', 'marginBottom': '10px',
-                                 'borderRadius': '6px', 'border': '1px solid #334155', 'backgroundColor': CARD_BG,
-                                 'color': TEXT_PRIMARY}),
-                dcc.Dropdown(id='booking-vehicle',
-                             options=[{'label': 'Car', 'value': 'Car'}, {'label': 'Bike', 'value': 'Bike'},
-                                      {'label': 'SUV', 'value': 'SUV'}],
-                             placeholder='Vehicle Type', style={'marginBottom': '10px'}),
-                dcc.Input(id='booking-license', type='text', placeholder='License Plate (e.g., MU-1234)',
-                          style={'width': '100%', 'padding': '12px', 'marginBottom': '10px',
-                                 'borderRadius': '6px', 'border': '1px solid #334155', 'backgroundColor': CARD_BG,
-                                 'color': TEXT_PRIMARY}),
-                dcc.Input(id='booking-duration', type='number', placeholder='Duration (hours)', min=1, max=24, value=2,
-                          style={'width': '100%', 'padding': '12px', 'marginBottom': '20px',
-                                 'borderRadius': '6px', 'border': '1px solid #334155', 'backgroundColor': CARD_BG,
-                                 'color': TEXT_PRIMARY}),
-                html.Div(id='booking-cost-display', style={'color': TEXT_SECONDARY, 'marginBottom': '15px'}),
-                html.Button('Book Slot', id='submit-booking', n_clicks=0,
+                html.H3("Book Your Parking Slot", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
+                dcc.Input(id='booking-name', type='text', placeholder='Full Name',
+                          style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'borderRadius': '6px',
+                                 'border': '1px solid #334155', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY}),
+                dcc.Input(id='booking-phone', type='tel', placeholder='Phone Number',
+                          style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'borderRadius': '6px',
+                                 'border': '1px solid #334155', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY}),
+                dcc.Input(id='booking-vehicle', type='text', placeholder='Vehicle Type (Car/Bike/SUV)',
+                          style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'borderRadius': '6px',
+                                 'border': '1px solid #334155', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY}),
+                dcc.Input(id='booking-license', type='text', placeholder='License Plate',
+                          style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'borderRadius': '6px',
+                                 'border': '1px solid #334155', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY}),
+                dcc.Input(id='booking-duration', type='number', placeholder='Duration (hours)', min=1, max=24,
+                          style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'borderRadius': '6px',
+                                 'border': '1px solid #334155', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY}),
+                html.Div(id='booking-cost-display', style={'color': ACCENT_COLOR, 'marginBottom': '15px'}),
+                html.Button('Book Now', id='submit-booking', n_clicks=0,
                             style={'width': '100%', 'padding': '12px', 'backgroundColor': SUCCESS_COLOR,
-                                   'color': 'white', 'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer'}),
-                html.Div(id='booking-result', style={'marginTop': '15px'})
+                                   'color': 'white',
+                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer', 'fontWeight': 'bold'}),
+                html.Div(id='booking-result', style={'marginTop': '20px'})
             ], style={'backgroundColor': CARD_BG, 'padding': '30px', 'borderRadius': '12px'})
-        ], style={'maxWidth': '500px', 'margin': '0 auto', 'padding': '20px'})
-    ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
-
-
-def admin_dashboard_layout():
-    return html.Div([
-        html.Div([
-            html.Div([
-                html.H1("🚗 Parking Dashboard", style={'color': TEXT_PRIMARY, 'margin': 0}),
-                html.P(f"Current Rate: Rs {get_dynamic_rate()}/hr", style={'color': TEXT_SECONDARY, 'margin': 0})
-            ]),
-            html.Div([
-                html.Button('📊 Dashboard', id='nav-dashboard', n_clicks=0,
-                            style={'padding': '8px 16px', 'backgroundColor': ACCENT_COLOR, 'color': 'white',
-                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
-                                   'marginRight': '10px'}),
-                html.Button('📝 Bookings', id='nav-bookings', n_clicks=0,
-                            style={'padding': '8px 16px', 'backgroundColor': TEXT_SECONDARY, 'color': 'white',
-                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
-                                   'marginRight': '10px'}),
-                html.Button('🔍 Activity', id='nav-activity', n_clicks=0,
-                            style={'padding': '8px 16px', 'backgroundColor': TEXT_SECONDARY, 'color': 'white',
-                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
-                                   'marginRight': '10px'}),
-                html.Button('🔧 Admin Tools', id='nav-admin-tools', n_clicks=0,
-                            style={'padding': '8px 16px', 'backgroundColor': WARNING_COLOR, 'color': 'white',
-                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
-                                   'marginRight': '10px'}),
-                html.Button('Logout', id='logout-button', n_clicks=0,
-                            style={'padding': '8px 16px', 'backgroundColor': DANGER_COLOR, 'color': 'white',
-                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer'})
-            ])
-        ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center',
-                  'padding': '20px', 'backgroundColor': CARD_BG, 'marginBottom': '20px'}),
-        html.Div(id='admin-content', style={'padding': '0 20px'})
-    ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
+        ], style={'maxWidth': '600px', 'margin': '50px auto'})
+    ], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh', 'padding': '20px'})
 
 
 def render_admin_controls():
     return html.Div([
-        html.H2("🔧 Admin Controls", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
-
+        html.H2("⚙️ Admin Control Panel", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
         html.Div([
             html.Div([
                 html.H3("System Management", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
@@ -722,6 +738,7 @@ def render_admin_controls():
 
 
 def render_dashboard_content(df, stats):
+    """Render the main dashboard with real-time PostgreSQL data"""
     occupancy_history.append(stats['occupancy_rate'])
     revenue_history.append(stats['total_earnings'])
     timestamp_history.append(datetime.datetime.now().strftime("%H:%M:%S"))
@@ -736,6 +753,7 @@ def render_dashboard_content(df, stats):
                           'percentage': (available / total * 100) if total > 0 else 0})
 
     return html.Div([
+        # Alerts Section
         html.Div([
             html.Div([
                 html.Div([
@@ -747,30 +765,38 @@ def render_dashboard_content(df, stats):
             ]) for alert in alerts
         ], style={'marginBottom': '20px'}),
 
+        # Main Metrics - DYNAMICALLY UPDATED FROM POSTGRESQL
         html.Div([
             html.Div([html.Div([
-                html.H3(f"{stats['available']}", style={'color': SUCCESS_COLOR, 'margin': 0, 'fontSize': '32px'}),
+                html.H3(f"{stats['available']}",
+                        style={'color': SUCCESS_COLOR, 'margin': 10, 'fontSize': '32px'},
+                        id='metric-available'),
                 html.P("Available Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
-                html.H3(f"{stats['occupied']}", style={'color': WARNING_COLOR, 'margin': 0, 'fontSize': '32px'}),
+                html.H3(f"{stats['occupied']}",
+                        style={'color': WARNING_COLOR, 'margin': 0, 'fontSize': '32px'},
+                        id='metric-occupied'),
                 html.P("Occupied Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
                 html.H3(f"{stats['occupancy_rate']:.1f}%",
-                        style={'color': ACCENT_COLOR, 'margin': 0, 'fontSize': '32px'}),
+                        style={'color': ACCENT_COLOR, 'margin': 0, 'fontSize': '32px'},
+                        id='metric-occupancy'),
                 html.P("Occupancy Rate", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
                 html.H3(f"Rs {stats['total_earnings']:,.0f}",
-                        style={'color': SUCCESS_COLOR, 'margin': 0, 'fontSize': '28px'}),
+                        style={'color': SUCCESS_COLOR, 'margin': 0, 'fontSize': '28px'},
+                        id='metric-revenue'),
                 html.P("Total Revenue", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1})
         ], style={'display': 'flex', 'marginBottom': '20px'}),
 
+        # Charts Section
         html.Div([
             html.Div([
                 html.H3("Occupancy Trend", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
@@ -798,6 +824,7 @@ def render_dashboard_content(df, stats):
             ], style=CHART_CARD)
         ], style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr', 'gap': '20px', 'marginBottom': '20px'}),
 
+        # Zone Availability Section
         html.Div([
             html.H3("Zone Availability", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
             html.Div([
@@ -809,15 +836,16 @@ def render_dashboard_content(df, stats):
                         style={'width': '100%', 'height': '8px', 'backgroundColor': '#334155', 'borderRadius': '4px',
                                'marginTop': '8px', 'overflow': 'hidden'},
                         children=[html.Div(style={'width': f"{z['percentage']}%", 'height': '100%',
-                                                  'backgroundColor': SUCCESS_COLOR if z[
-                                                                                          'percentage'] > 50 else WARNING_COLOR if
-                                                  z['percentage'] > 20 else DANGER_COLOR})])
+                                                  'backgroundColor': SUCCESS_COLOR if z['percentage'] > 50
+                                                  else WARNING_COLOR if z['percentage'] > 20
+                                                  else DANGER_COLOR})])
                 ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px'})
                 for z in zone_data
             ], style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr 1fr 1fr', 'gap': '15px',
                       'marginBottom': '20px'})
         ], style=CHART_CARD),
 
+        # Parking Slots Table
         html.Div([
             html.H3("All Parking Slots", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
             dash_table.DataTable(
@@ -850,152 +878,109 @@ def render_bookings_content():
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
-                html.H3(f"{len([b for b in bookings if b['status'] == 'completed'])}",
-                        style={'color': TEXT_SECONDARY, 'margin': 0, 'fontSize': '32px'}),
-                html.P("Completed", style={'color': TEXT_SECONDARY, 'margin': 0})
-            ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
-
-            html.Div([html.Div([
-                html.H3(f"Rs {sum([b['cost'] for b in bookings]):,.0f}",
-                        style={'color': ACCENT_COLOR, 'margin': 0, 'fontSize': '28px'}),
-                html.P("Total Value", style={'color': TEXT_SECONDARY, 'margin': 0})
+                html.H3(f"{len(bookings)}", style={'color': ACCENT_COLOR, 'margin': 0, 'fontSize': '32px'}),
+                html.P("Total Bookings", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1})
-        ], style={'display': 'flex', 'gap': '15px', 'marginBottom': '20px'}),
+        ], style={'display': 'flex', 'marginBottom': '20px'}),
 
         html.Div([
-            html.Div([
-                html.Div([
-                    html.Div([
-                        html.H4(f"{b['name']}", style={'color': TEXT_PRIMARY, 'margin': 0}),
-                        html.P(f"📞 {b['phone']} | 🚗 {b['vehicle']} | {b['license']}",
-                               style={'color': TEXT_SECONDARY, 'margin': '5px 0', 'fontSize': '14px'}),
-                        html.P(
-                            f"Slot: {b['slot']} ({b['zone']}) | Duration: {b['duration']}h | Cost: Rs {b['cost']:.2f}",
-                            style={'color': TEXT_SECONDARY, 'margin': '5px 0', 'fontSize': '14px'}),
-                        html.P(f"Booked: {b['timestamp']}",
-                               style={'color': TEXT_SECONDARY, 'margin': '5px 0', 'fontSize': '12px'})
-                    ], style={'flex': 1}),
-                    html.Div([
-                        html.Span("✅ ACTIVE" if b['status'] == 'active' else "✓ COMPLETED",
-                                  style={'padding': '6px 12px', 'borderRadius': '6px', 'fontSize': '12px',
-                                         'fontWeight': 'bold',
-                                         'backgroundColor': SUCCESS_COLOR if b[
-                                                                                 'status'] == 'active' else TEXT_SECONDARY,
-                                         'color': 'white'})
-                    ])
-                ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center'})
-            ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px', 'marginBottom': '10px'})
-            for b in bookings[:20]
-        ])
+            html.H3("Recent Bookings", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
+            dash_table.DataTable(
+                data=bookings,
+                columns=[{"name": "ID", "id": "id"}, {"name": "Name", "id": "name"},
+                         {"name": "Phone", "id": "phone"}, {"name": "Vehicle", "id": "vehicle"},
+                         {"name": "Slot", "id": "slot"}, {"name": "Zone", "id": "zone"},
+                         {"name": "Duration (hrs)", "id": "duration"}, {"name": "Cost (Rs)", "id": "cost"},
+                         {"name": "Status", "id": "status"}, {"name": "Time", "id": "timestamp"}],
+                style_table={'overflowX': 'auto'},
+                style_cell={'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY, 'textAlign': 'left', 'padding': '12px',
+                            'border': '1px solid #334155'},
+                style_header={'backgroundColor': '#334155', 'fontWeight': 'bold', 'border': '1px solid #475569'},
+                page_size=15, sort_action='native', filter_action='native'
+            )
+        ], style=CHART_CARD)
     ])
 
 
 def render_activity_content():
     logs = get_activity_log()
     return html.Div([
-        html.H2("🔍 Activity Log", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
+        html.H2("📋 Activity Log", style={'color': TEXT_PRIMARY, 'marginBottom': '20px'}),
         html.Div([
+            html.H3("Recent System Activity", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
             html.Div([
                 html.Div([
-                    html.Span(log['timestamp'].strftime("%Y-%m-%d %H:%M:%S") if hasattr(log['timestamp'],
-                                                                                        'strftime') else str(
-                        log['timestamp']),
-                              style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'width': '150px'}),
-                    html.Span(f"👤 {log['user_name']}",
-                              style={'color': ACCENT_COLOR, 'fontSize': '14px', 'width': '120px',
-                                     'marginLeft': '15px'}),
-                    html.Span(f"📋 {log['action']}", style={'color': TEXT_PRIMARY, 'fontSize': '14px', 'width': '150px',
-                                                           'marginLeft': '15px'}),
-                    html.Span(log['details'],
-                              style={'color': TEXT_SECONDARY, 'fontSize': '14px', 'flex': 1, 'marginLeft': '15px'})
-                ], style={'display': 'flex', 'alignItems': 'center', 'padding': '15px', 'backgroundColor': CARD_BG,
-                          'borderRadius': '8px', 'marginBottom': '8px'})
-            ]) for log in logs
-        ])
+                    html.P(f"{log.get('timestamp', 'N/A')}",
+                           style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'margin': 0}),
+                    html.P(f"👤 {log.get('user_name', 'Unknown')}",
+                           style={'color': TEXT_PRIMARY, 'fontWeight': 'bold', 'margin': '5px 0'}),
+                    html.P(f"🔧 {log.get('action', 'No action')}", style={'color': ACCENT_COLOR, 'margin': '5px 0'}),
+                    html.P(f"📝 {log.get('details', 'No details')}",
+                           style={'color': TEXT_SECONDARY, 'fontSize': '14px', 'margin': '5px 0'})
+                ], style={'backgroundColor': CARD_BG, 'padding': '15px', 'borderRadius': '8px', 'marginBottom': '10px',
+                          'border': '1px solid #334155'})
+                for log in logs[:20]
+            ])
+        ], style=CHART_CARD)
     ])
 
 
-# App Layout
+# Main App Layout
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='session-store', storage_type='session'),
-    dcc.Store(id='view-store', data='dashboard'),
-    html.Div(id='page-content', children=login_layout()),
-    dcc.Interval(id='interval-component', interval=10 * 1000, n_intervals=0)
-], style={'backgroundColor': MAIN_BG, 'minHeight': '100vh'})
+    html.Div(id='page-content')
+])
 
 
-# CALLBACKS
-
+# Callbacks
 # Callback 1: Handle login
 @app.callback(
-    [Output('session-store', 'data'), Output('login-alert', 'children')],
+    [Output('session-store', 'data'), Output('login-message', 'children')],
     Input('login-button', 'n_clicks'),
     [State('username-input', 'value'), State('password-input', 'value')],
     prevent_initial_call=True
 )
 def login(n_clicks, username, password):
-    if n_clicks and n_clicks > 0:
-        if username and password and username in ADMIN_CREDENTIALS and ADMIN_CREDENTIALS[username] == password:
+    if n_clicks > 0:
+        if username in ADMIN_CREDENTIALS and ADMIN_CREDENTIALS[username] == password:
             log_activity("User Login", f"User {username} logged in", username)
-            return {'authenticated': True, 'username': username}, ''
+            return {'authenticated': True, 'username': username, 'role': USER_ROLES[username]}, ""
         else:
-            return dash.no_update, '❌ Invalid credentials'
-    return dash.no_update, ''
+            return dash.no_update, "Invalid credentials"
+    return dash.no_update, ""
 
 
-# Callback 2: Display the correct page based on session
+# Callback 2: Handle logout
 @app.callback(
-    Output('page-content', 'children'),
-    Input('session-store', 'data'),
-    prevent_initial_call=False
-)
-def display_page_on_auth(session_data):
-    if session_data and session_data.get('authenticated'):
-        return admin_dashboard_layout()
-    return login_layout()
-
-
-# Callback 3: Handle public booking button
-@app.callback(
-    Output('page-content', 'children', allow_duplicate=True),
-    Input('public-booking-button', 'n_clicks'),
-    prevent_initial_call=True
-)
-def go_to_public_booking(n_clicks):
-    if n_clicks:
-        return public_booking_layout()
-    return dash.no_update
-
-
-# Callback 4: Handle back to login button
-@app.callback(
-    Output('page-content', 'children', allow_duplicate=True),
-    Input('back-to-login', 'n_clicks'),
-    prevent_initial_call=True
-)
-def go_back_to_login(n_clicks):
-    if n_clicks:
-        return login_layout()
-    return dash.no_update
-
-
-# Callback 5: Handle logout
-@app.callback(
-    [Output('session-store', 'data', allow_duplicate=True), Output('url', 'pathname')],
+    Output('session-store', 'data', allow_duplicate=True),
     Input('logout-button', 'n_clicks'),
     State('session-store', 'data'),
     prevent_initial_call=True
 )
 def logout(n_clicks, session_data):
-    if n_clicks > 0:
-        username = session_data.get('username', 'Unknown') if session_data else 'Unknown'
-        log_activity("User Logout", f"User {username} logged out", username)
-        return None, '/'
-    return dash.no_update, dash.no_update
+    if n_clicks > 0 and session_data:
+        log_activity("User Logout", f"User {session_data.get('username')} logged out", session_data.get('username'))
+        return None
+    return dash.no_update
 
 
-# Callback 6: Handle navigation between dashboard sections
+# Callback 3: Render correct page
+@app.callback(
+    Output('page-content', 'children'),
+    [Input('url', 'pathname'), Input('session-store', 'data')],
+    prevent_initial_call=False
+)
+def display_page(pathname, session_data):
+    if pathname == '/booking' or pathname == '/book':
+        return public_booking_layout()
+    elif session_data and session_data.get('authenticated'):
+        return admin_layout()
+    else:
+        return login_layout()
+
+
+# Callback 4: Navigation
 @app.callback(
     Output('view-store', 'data'),
     [Input('nav-dashboard', 'n_clicks'),
@@ -1019,7 +1004,7 @@ def navigation(dash_clicks, book_clicks, act_clicks, admin_clicks):
     return 'dashboard'
 
 
-# Callback 7: Update admin dashboard content
+# Callback 5: Update admin dashboard content (MAIN CALLBACK FOR REAL-TIME POSTGRESQL DATA)
 @app.callback(
     Output('admin-content', 'children'),
     [Input('interval-component', 'n_intervals'), Input('view-store', 'data')],
@@ -1030,6 +1015,7 @@ def update_admin_content(n, view, session_data):
     if not session_data or not session_data.get('authenticated'):
         return html.Div()
 
+    # Fetch real-time data from PostgreSQL
     df = get_parking_data()
     if df.empty:
         return html.Div([
@@ -1038,9 +1024,14 @@ def update_admin_content(n, view, session_data):
             html.P("Cannot connect to PostgreSQL database.", style={'color': TEXT_SECONDARY, 'textAlign': 'center'}),
             html.P(f"DATABASE_URL: {DATABASE_URL[:50]}...",
                    style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'textAlign': 'center'}),
-            html.P("Please check your database connection.", style={'color': DANGER_COLOR, 'textAlign': 'center'})
+            html.P("Please check your database connection.", style={'color': DANGER_COLOR, 'textAlign': 'center'}),
+            html.Button('🔄 Retry Connection', id='retry-button', n_clicks=0,
+                        style={'padding': '10px 20px', 'backgroundColor': ACCENT_COLOR, 'color': 'white',
+                               'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer', 'margin': '20px auto',
+                               'display': 'block'})
         ], style={'backgroundColor': CARD_BG, 'padding': '40px', 'borderRadius': '12px', 'margin': '20px'})
 
+    # Calculate statistics from real-time data
     stats = get_statistics(df)
 
     if view == 'bookings':
@@ -1053,7 +1044,7 @@ def update_admin_content(n, view, session_data):
         return render_dashboard_content(df, stats)
 
 
-# Callback 8: Handle admin control buttons
+# Callback 6: Handle admin control buttons
 @app.callback(
     Output('admin-controls-result', 'children'),
     [Input('reset-all-button', 'n_clicks'),
@@ -1108,7 +1099,7 @@ def handle_admin_controls(reset_clicks, clear_clicks, simulate_clicks):
     return ""
 
 
-# Callback 9: Update public booking stats
+# Callback 7: Update public booking stats
 @app.callback(
     Output('public-stats', 'children'),
     Input('interval-component', 'n_intervals'),
@@ -1135,7 +1126,7 @@ def update_public_stats(n):
     ], style={'display': 'flex'})
 
 
-# Callback 10: Update booking cost display
+# Callback 8: Update booking cost display
 @app.callback(
     Output('booking-cost-display', 'children'),
     Input('booking-duration', 'value'),
@@ -1148,7 +1139,7 @@ def update_cost(duration):
     return ""
 
 
-# Callback 11: Handle booking submission
+# Callback 9: Handle booking submission
 @app.callback(
     Output('booking-result', 'children'),
     Input('submit-booking', 'n_clicks'),
@@ -1197,4 +1188,10 @@ def submit_booking(n_clicks, name, phone, vehicle, license_plate, duration):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
+    print("=" * 60)
+    print(f"🚀 Starting server on port {port}")
+    print(f"📍 Admin Panel: http://localhost:{port}")
+    print(f"📍 Public Booking: http://localhost:{port}/booking")
+    print(f"🔐 Admin Login: username='admin', password='admin123'")
+    print("=" * 60)
     app.run(host="0.0.0.0", port=port, debug=False)
