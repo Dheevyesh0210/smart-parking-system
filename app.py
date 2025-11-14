@@ -464,9 +464,8 @@ def get_statistics(df):
         'total_earnings': total_earnings, 'avg_duration': avg_duration, 'overstay_count': overstay_count,
         'turnover_rate': turnover_rate, 'avg_wait': avg_wait
     }
-
-    print(
-        f"📊 Stats - Available: {available}, Occupied: {occupied}, Occupancy: {occupancy_rate:.1f}%, Revenue: Rs {total_earnings:.0f}")
+    
+    print(f"📊 Stats - Available: {available}, Occupied: {occupied}, Occupancy: {occupancy_rate:.1f}%, Revenue: Rs {total_earnings:.0f}")
     return stats_result
 
 
@@ -651,8 +650,7 @@ def admin_layout():
             html.Div([
                 html.Button('📊 Dashboard', id='nav-dashboard', n_clicks=0,
                             style={'padding': '10px 20px', 'backgroundColor': ACCENT_COLOR, 'color': 'white',
-                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer',
-                                   'marginRight': '10px'}),
+                                   'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer', 'marginRight': '10px'}),
                 html.Button('📝 Bookings', id='nav-bookings', n_clicks=0,
                             style={'padding': '10px 20px', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY,
                                    'border': '1px solid #334155', 'borderRadius': '6px', 'cursor': 'pointer',
@@ -699,8 +697,7 @@ def public_booking_layout():
                                  'border': '1px solid #334155', 'backgroundColor': CARD_BG, 'color': TEXT_PRIMARY}),
                 html.Div(id='booking-cost-display', style={'color': ACCENT_COLOR, 'marginBottom': '15px'}),
                 html.Button('Book Now', id='submit-booking', n_clicks=0,
-                            style={'width': '100%', 'padding': '12px', 'backgroundColor': SUCCESS_COLOR,
-                                   'color': 'white',
+                            style={'width': '100%', 'padding': '12px', 'backgroundColor': SUCCESS_COLOR, 'color': 'white',
                                    'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer', 'fontWeight': 'bold'}),
                 html.Div(id='booking-result', style={'marginTop': '20px'})
             ], style={'backgroundColor': CARD_BG, 'padding': '30px', 'borderRadius': '12px'})
@@ -768,16 +765,16 @@ def render_dashboard_content(df, stats):
         # Main Metrics - DYNAMICALLY UPDATED FROM POSTGRESQL
         html.Div([
             html.Div([html.Div([
-                html.H3(f"{stats['available']}",
-                        style={'color': SUCCESS_COLOR, 'margin': 10, 'fontSize': '32px'},
-                        id='metric-available'),
+                html.H3(f"{stats['available']}", 
+                       style={'color': SUCCESS_COLOR, 'margin': 10, 'fontSize': '32px'}, 
+                       id='metric-available'),
                 html.P("Available Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
             html.Div([html.Div([
-                html.H3(f"{stats['occupied']}",
-                        style={'color': WARNING_COLOR, 'margin': 0, 'fontSize': '32px'},
-                        id='metric-occupied'),
+                html.H3(f"{stats['occupied']}", 
+                       style={'color': WARNING_COLOR, 'margin': 0, 'fontSize': '32px'},
+                       id='metric-occupied'),
                 html.P("Occupied Slots", style={'color': TEXT_SECONDARY, 'margin': 0})
             ], style=METRIC_CARD)], style={'flex': 1, 'marginRight': '10px'}),
 
@@ -836,8 +833,8 @@ def render_dashboard_content(df, stats):
                         style={'width': '100%', 'height': '8px', 'backgroundColor': '#334155', 'borderRadius': '4px',
                                'marginTop': '8px', 'overflow': 'hidden'},
                         children=[html.Div(style={'width': f"{z['percentage']}%", 'height': '100%',
-                                                  'backgroundColor': SUCCESS_COLOR if z['percentage'] > 50
-                                                  else WARNING_COLOR if z['percentage'] > 20
+                                                  'backgroundColor': SUCCESS_COLOR if z['percentage'] > 50 
+                                                  else WARNING_COLOR if z['percentage'] > 20 
                                                   else DANGER_COLOR})])
                 ], style={'backgroundColor': CARD_BG, 'padding': '20px', 'borderRadius': '8px'})
                 for z in zone_data
@@ -910,13 +907,10 @@ def render_activity_content():
             html.H3("Recent System Activity", style={'color': TEXT_PRIMARY, 'marginBottom': '15px'}),
             html.Div([
                 html.Div([
-                    html.P(f"{log.get('timestamp', 'N/A')}",
-                           style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'margin': 0}),
-                    html.P(f"👤 {log.get('user_name', 'Unknown')}",
-                           style={'color': TEXT_PRIMARY, 'fontWeight': 'bold', 'margin': '5px 0'}),
+                    html.P(f"{log.get('timestamp', 'N/A')}", style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'margin': 0}),
+                    html.P(f"👤 {log.get('user_name', 'Unknown')}", style={'color': TEXT_PRIMARY, 'fontWeight': 'bold', 'margin': '5px 0'}),
                     html.P(f"🔧 {log.get('action', 'No action')}", style={'color': ACCENT_COLOR, 'margin': '5px 0'}),
-                    html.P(f"📝 {log.get('details', 'No details')}",
-                           style={'color': TEXT_SECONDARY, 'fontSize': '14px', 'margin': '5px 0'})
+                    html.P(f"📝 {log.get('details', 'No details')}", style={'color': TEXT_SECONDARY, 'fontSize': '14px', 'margin': '5px 0'})
                 ], style={'backgroundColor': CARD_BG, 'padding': '15px', 'borderRadius': '8px', 'marginBottom': '10px',
                           'border': '1px solid #334155'})
                 for log in logs[:20]
@@ -1026,9 +1020,9 @@ def update_admin_content(n, view, session_data):
                    style={'color': TEXT_SECONDARY, 'fontSize': '12px', 'textAlign': 'center'}),
             html.P("Please check your database connection.", style={'color': DANGER_COLOR, 'textAlign': 'center'}),
             html.Button('🔄 Retry Connection', id='retry-button', n_clicks=0,
-                        style={'padding': '10px 20px', 'backgroundColor': ACCENT_COLOR, 'color': 'white',
-                               'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer', 'margin': '20px auto',
-                               'display': 'block'})
+                       style={'padding': '10px 20px', 'backgroundColor': ACCENT_COLOR, 'color': 'white',
+                              'border': 'none', 'borderRadius': '6px', 'cursor': 'pointer', 'margin': '20px auto',
+                              'display': 'block'})
         ], style={'backgroundColor': CARD_BG, 'padding': '40px', 'borderRadius': '12px', 'margin': '20px'})
 
     # Calculate statistics from real-time data
